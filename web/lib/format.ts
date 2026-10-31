@@ -38,6 +38,17 @@ export function money(cents: number | null | undefined, currency = "USD") {
   return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 0 }).format(cents / 100);
 }
 
+/** Calendar day of an instant in TEAM_TZ, as "YYYY-MM-DD". */
+export function teamDay(iso: string | Date) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: TEAM_TZ, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
+}
+
+/** Short label for a "YYYY-MM-DD" day, e.g. "31 Oct". */
+export function dayLabel(day: string) {
+  const [y, m, d] = day.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", day: "numeric", month: "short" }).format(new Date(Date.UTC(y, m - 1, d)));
+}
+
 /** The time it is now somewhere else, e.g. "9:42 am Thu". */
 export function localNow(tz: string) {
   try {

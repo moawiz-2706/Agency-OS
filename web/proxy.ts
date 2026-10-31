@@ -4,7 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 const PUBLIC = ["/login", "/auth/"];
 
 /** Refresh the Supabase session on every request and send signed-out visitors to /login. */
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {

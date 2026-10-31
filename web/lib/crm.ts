@@ -18,12 +18,20 @@ export const STAGE_LABEL: Record<Stage, string> = {
   lost: "Lost", nurture: "Nurture", disqualified: "Disqualified",
 };
 
+/** Badge tint per stage: neutral for early stages, warmer as a lead gets closer to won. */
 export const STAGE_COLOR: Record<Stage, string> = {
-  new: "bg-slate-100 text-slate-700", researching: "bg-sky-100 text-sky-800", ready: "bg-cyan-100 text-cyan-800",
-  contacted: "bg-indigo-100 text-indigo-800", replied: "bg-violet-100 text-violet-800",
-  interested: "bg-amber-100 text-amber-800", meeting_booked: "bg-orange-100 text-orange-800",
-  proposal_sent: "bg-fuchsia-100 text-fuchsia-800", won: "bg-emerald-100 text-emerald-800",
-  lost: "bg-rose-100 text-rose-800", nurture: "bg-lime-100 text-lime-800", disqualified: "bg-zinc-200 text-zinc-600",
+  new: "bg-muted text-muted-foreground border-transparent",
+  researching: "bg-sky-50 text-sky-700 border-sky-200",
+  ready: "bg-cyan-50 text-cyan-700 border-cyan-200",
+  contacted: "bg-indigo-50 text-indigo-700 border-indigo-200",
+  replied: "bg-violet-50 text-violet-700 border-violet-200",
+  interested: "bg-amber-50 text-amber-700 border-amber-200",
+  meeting_booked: "bg-orange-50 text-orange-700 border-orange-200",
+  proposal_sent: "bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200",
+  won: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  lost: "bg-rose-50 text-rose-700 border-rose-200",
+  nurture: "bg-lime-50 text-lime-700 border-lime-200",
+  disqualified: "bg-zinc-100 text-zinc-500 border-zinc-200",
 };
 
 export const CHANNELS = ["call", "email", "loom", "sms", "linkedin", "research", "meeting", "proposal", "other"] as const;
@@ -53,3 +61,20 @@ export type Member = { id: string; full_name: string | null; email: string; role
 
 export const memberName = (m?: Pick<Member, "full_name" | "email"> | null) =>
   m ? m.full_name || m.email.split("@")[0] : "Unassigned";
+
+export const initials = (m?: Pick<Member, "full_name" | "email"> | null) =>
+  memberName(m).split(/[\s.]+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("") || "?";
+
+/**
+ * Categorical palette (validated for colour-blind separation, in this fixed order).
+ * Each team member keeps their slot everywhere: charts, avatars, pipeline cards.
+ */
+export const PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"];
+export const UNASSIGNED_COLOR = "#a8a29e";
+
+/** Colour for a member by their position in the team list (oldest first), never by rank in a chart. */
+export function memberColor(team: Pick<Member, "id">[], id: string | null | undefined) {
+  if (!id) return UNASSIGNED_COLOR;
+  const i = team.findIndex((m) => m.id === id);
+  return i < 0 ? UNASSIGNED_COLOR : PALETTE[i % PALETTE.length];
+}
