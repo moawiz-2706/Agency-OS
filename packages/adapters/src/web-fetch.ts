@@ -67,6 +67,14 @@ export async function safeFetch(raw: string, { userAgent, timeoutMs = 10_000 }: 
   throw new Error("too many redirects");
 }
 
+/** False when this machine can't resolve well-known hosts, i.e. we're offline, not the site. */
+export async function isOnline(): Promise<boolean> {
+  for (const host of ["www.google.com", "www.cloudflare.com"]) {
+    try { await dns.lookup(host); return true; } catch { /* try the next one */ }
+  }
+  return false;
+}
+
 /** Very small robots.txt check: skip if `User-agent: *` disallows `/`. */
 export async function robotsAllows(siteUrl: string, opts: FetchOptions): Promise<boolean> {
   try {

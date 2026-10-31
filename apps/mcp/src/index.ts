@@ -96,6 +96,7 @@ server.registerTool(
     inputSchema: {
       company_ids: z.array(z.string().uuid()).optional(),
       limit: z.number().int().min(1).max(25).default(10),
+      retry_failed: z.boolean().optional().describe("Re-check leads whose last audit failed (site down, timeout, lost connection)"),
     },
   },
   run(auditCompanies),

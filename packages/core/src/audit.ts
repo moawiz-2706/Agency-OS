@@ -20,14 +20,29 @@ export async function auditWebsite(url: string) {
  * Audit the given leads, or the next batch of unaudited ones: store each audit,
  * re-score, and return short findings.
  */
-export async function auditCompanies({ company_ids, limit }: { company_ids?: string[]; limit: number }) {
+export async function auditCompanies({ company_ids, limit, retry_failed }: { company_ids?: string[]; limit: number; retry_failed?: boolean }) {
+  let ids = company_ids;
+  if (!ids?.length && retry_failed) {
+    // Leads whose most recent audit errored (site down, timeout, lost connection).
+    const rows = must(await db().from("website_audits").select("company_id,error,fetched_at").order("fetched_at", { ascending: false }).limit(10_000)) as any[];
+    const latest = new Map<string, { error: string | null; at: string }>();
+    for (const r of rows) if (!latest.has(r.company_id)) latest.set(r.company_id, { error: r.error, at: r.fetched_at });
+    // Oldest failures first, so sites that fail again go to the back of the queue.
+    ids = [...latest].filter(([, a]) => a.error).sort((a, b) => a[1].at.localeCompare(b[1].at)).map(([id]) => id).slice(0, limit);
+    if (!ids.length) return { audited: 0, results: [] };
+  }
   let q = db().from("companies").select("*").not("website", "is", null);
-  q = company_ids?.length ? q.in("id", company_ids) : q.is("last_audited_at", null).neq("status", "disqualified");
+  q = ids?.length ? q.in("id", ids) : q.is("last_audited_at", null).neq("status", "disqualified");
   const companies = must(await q.limit(limit)) as any[];
 
   const results = [];
   for (const c of companies) {
     const audit = await auditWebsite(c.website);
+    // A lookup failure can mean the site is gone or that we're offline. Offline must not
+    // mark leads as audited, or they'd never be retried (SPEC: failed fetches never lose a lead).
+    if (!audit.ok && /ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ENETUNREACH|fetch failed/.test(audit.error) && !(await web.isOnline())) {
+      throw new Error(`No internet connection: stopped after ${results.length} sites. Nothing else was marked; run again when online.`);
+    }
     must(await db().from("website_audits").insert({
       company_id: c.id,
       url: c.website,

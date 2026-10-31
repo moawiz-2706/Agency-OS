@@ -1,4 +1,4 @@
-import { GooglePlacesSource, robotsAllows, safeFetch, type LeadSource } from "@agencyos/adapters";
+import { GooglePlacesSource, isOnline, robotsAllows, safeFetch, type LeadSource } from "@agencyos/adapters";
 import { env } from "@agencyos/db";
 import { USER_AGENT } from "./config.js";
 
@@ -14,4 +14,5 @@ export function leadSource(): LeadSource {
 export const web = {
   fetch: (url: string) => safeFetch(url, { userAgent: USER_AGENT }),
   robotsAllows: (url: string) => robotsAllows(url, { userAgent: USER_AGENT }),
+  isOnline,
 };
