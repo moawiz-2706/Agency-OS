@@ -16,7 +16,8 @@
     "start": "pnpm --filter @agencyos/mcp start",
     "test:db": "node --test supabase/test/*.test.mjs",
     "setup-team": "node scripts/setup-team.mjs",
-    "import-leads": "node scripts/import-leads.mjs"
+    "import-leads": "node scripts/import-leads.mjs",
+    "audit-leads": "pnpm --silent --filter @agencyos/mcp audit-leads"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.3.15"

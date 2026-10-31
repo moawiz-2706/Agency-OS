@@ -35,6 +35,16 @@ export async function logActivities(rows: { company_id: string | null; type: str
   }
 }
 
+/** Every row of a query, 1000 at a time (PostgREST caps a single response at 1000 rows). */
+export async function selectAll<T>(page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>) {
+  const out: T[] = [];
+  for (let from = 0; ; from += 1000) {
+    const rows = must(await page(from, from + 999)) ?? [];
+    out.push(...rows);
+    if (rows.length < 1000) return out;
+  }
+}
+
 export function must<T>(res: { data: T | null; error: { message: string } | null }): T {
   if (res.error) throw new Error(res.error.message);
   return res.data as T;

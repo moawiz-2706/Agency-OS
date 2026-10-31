@@ -5,11 +5,14 @@
   "private": true,
   "type": "module",
   "main": "dist/index.js",
-  "bin": { "agencyos-mcp": "dist/index.js" },
+  "bin": {
+    "agencyos-mcp": "dist/index.js"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsx --conditions=source src/index.ts",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "audit-leads": "tsx --conditions=source src/cli/audit-leads.ts"
   },
   "dependencies": {
     "@agencyos/core": "workspace:*",

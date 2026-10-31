@@ -1,7 +1,5 @@
 #!/usr/bin/env node
-import { config as loadEnv } from "dotenv";
-import { fileURLToPath } from "node:url";
-import path from "node:path";
+import "./env.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -10,10 +8,6 @@ import {
   addContact, auditCompanies, findLeads, getLead, importLeadsCsv, listLeads, pipelineSummary, suppress,
   updateLead, verifyEmails,
 } from "@agencyos/core";
-
-// Load .env from the repo root (apps/mcp/{src,dist} -> ../../..), no matter where Claude Desktop starts us.
-const here = path.dirname(fileURLToPath(import.meta.url));
-loadEnv({ path: path.resolve(here, "../../../.env"), quiet: true });
 
 // IMPORTANT: stdio transport uses stdout for protocol messages.
 // Log only with console.error.
