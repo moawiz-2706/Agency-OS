@@ -63,6 +63,9 @@ test("a gap without a URL is dropped; a row with no surviving gap is rejected un
   assert.deepEqual(p.dropped_gaps, ["gap_2 (no evidence URL)"]);
   const none = { gap_1_evidence_url: "see website", gap_2_evidence_url: "" };
   assert.equal(planResearchRow(row(none), ctx(), "f").kind, "reject");
+  // No gaps at all: research verified nothing, so the row is skipped rather than rejected.
+  const empty = planResearchRow(row({ status: "not_found", gap_1: "unknown", gap_1_evidence_url: "", gap_2: "", gap_2_evidence_url: "" }), ctx(), "f");
+  assert.deepEqual(empty, { kind: "skip", lead_id: "OSM-0042", reason: "nothing verified (status not_found, no gaps)" });
   assert.equal(planResearchRow(row({ ...none, status: "website_down" }), ctx(), "f").kind, "ok");
 });
 

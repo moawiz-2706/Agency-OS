@@ -52,7 +52,8 @@ The dry run shows what would happen without saving. Do 2–3 batches a day.
 | In the CSV | In AgencyOS |
 |---|---|
 | `lead_id` | Matched to the lead (`lead_ref`). Unknown IDs and the `EXAMPLE-…` row are skipped |
-| `gap_1…3` + evidence URLs | Gaps on the report. **A gap without a real URL is dropped**; a row with no gap left is rejected, unless the business is `closed` or `website_down` |
+| `gap_1…3` + evidence URLs | Gaps on the report. **A gap without a real URL is dropped**; if gaps were listed but none had a URL, the row is rejected. A row with no gaps at all (research verified nothing) is skipped. `closed` / `website_down` rows are always kept |
+| wrong number of columns | AI tools sometimes drop or add a cell. If the slip is only in the gap columns the row is realigned; otherwise it's rejected: research that lead again |
 | `recommended_offer`, `second_offer` | Must be one of the 7 offer keys, or `none`. Anything else rejects the row |
 | `offer_reason`, `email_hook`, `discovery_questions`, `confidence` | Report summary, email opener, call questions (split on ` \| `), confidence (clamped to 0–1) |
 | `google_rating`, `google_review_count` | Saved on the lead **only** if `reviews_source_url` is filled |
