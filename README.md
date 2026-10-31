@@ -13,6 +13,12 @@ You ──► Claude Desktop (Pro) ──► AgencyOS MCP server (this repo, run
 
 **Team CRM (web app):** see [`docs/GO-LIVE.md`](docs/GO-LIVE.md) to set up the team, import leads and deploy `web/` to Vercel.
 
+**Bulk website audit:** `pnpm audit-leads [--limit N] [--retry-failed]` checks lead websites 6 at a time and stores
+recommended offers. No Claude usage.
+
+**Research with other AI tools:** see [`docs/research/README.md`](docs/research/README.md): export batches, research them
+in ChatGPT/Perplexity/Gemini, then import the results.
+
 ## Repo layout (pnpm workspace)
 
 | Path | What lives there |
@@ -89,7 +95,7 @@ Claude Desktop → **Settings → Developer → Edit Config**. This opens `claud
 ```
 
 Fully quit and reopen Claude Desktop. **agencyos** should show up in the tools/connectors menu
-with 11 tools. The server reads keys from `agencyos/.env` (the repo root), so you don't need to put keys in this file.
+with 14 tools. The server reads keys from `agencyos/.env` (the repo root), so you don't need to put keys in this file.
 
 ## 5. Use it — example prompts
 
@@ -111,7 +117,10 @@ less of your Pro limit per lead.
 | `list_niches_and_markets` | Niche presets + starter cities |
 | `find_leads` | Google Places search → dedupe → save → first score |
 | `import_leads_csv` | Import a CSV of businesses + contacts (dedupe, suppression, consent basis). Try `dry_run` first |
-| `audit_websites` | Homepage check (booking, chat, ad pixels, GHL, emails) → re-score |
+| `audit_websites` | Homepage check (booking, chat, ad pixels, GHL, emails, copyright year) → re-score + recommended offers |
+| `list_research_queue` | Audited leads with no research report yet, best first |
+| `get_research_input` | Audit signals, recommended offers, contacts and offer catalogue for one lead |
+| `save_research_report` | Store a validated report (every gap needs an evidence URL) |
 | `list_leads` | Filter by status / tier / niche / city / score |
 | `get_lead` | Full record + score reasons + audit + contacts + history |
 | `update_lead` | Change status, add notes (logged) |

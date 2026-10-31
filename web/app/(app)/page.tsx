@@ -10,7 +10,7 @@ import {
   CHANNEL_LABEL, OUTCOME_LABEL, OUTREACH, PALETTE, POSITIVE, STAGE_LABEL, STAGES, memberColor, memberName,
   type Channel, type Outcome, type Stage,
 } from "@/lib/crm";
-import { TEAM_TZ, ago, dayLabel, minutes, teamDay } from "@/lib/format";
+import { TEAM_TZ, ago, dayLabel, minutes, periodWindow, teamDay } from "@/lib/format";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/page-header";
@@ -31,9 +31,7 @@ const RANGES = [7, 30, 90] as const;
 export default async function Dashboard({ searchParams }: { searchParams: Promise<{ days?: string }> }) {
   const asked = Number((await searchParams).days);
   const days = (RANGES as readonly number[]).includes(asked) ? asked : 7;
-  const now = Date.now();
-  const since = new Date(now - days * 86400_000).toISOString();
-  const prevSince = new Date(now - 2 * days * 86400_000).toISOString();
+  const { now, since, prevSince, dayKeys } = periodWindow(days);
   const supabase = await supabaseServer();
 
   const [team, touchesRes, leadsRes, stageRes, overdueRes, latestRes] = await Promise.all([
@@ -43,7 +41,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     supabase.from("companies").select("id", { count: "exact", head: true }),
     supabase.from("v_stage_counts").select("stage,owner_id,leads,minutes"),
     supabase.from("companies").select("id,name,next_step,next_step_at,owner_id")
-      .lt("next_step_at", new Date(now).toISOString()).not("stage", "in", "(won,lost,disqualified)")
+      .lt("next_step_at", now).not("stage", "in", "(won,lost,disqualified)")
       .order("next_step_at").limit(8),
     supabase.from("touches").select("id,company_id,member_id,channel,outcome,minutes,summary,happened_at,companies(name)")
       .order("happened_at", { ascending: false }).limit(8),
@@ -69,8 +67,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   ];
 
   // ---- time per day, stacked by member ----
-  const dayKeys: string[] = [];
-  for (let i = days - 1; i >= 0; i--) dayKeys.push(teamDay(new Date(now - i * 86400_000)));
   const memberKeys = [...team.map((m) => m.id), ...(cur.some((t) => !t.member_id) ? ["none"] : [])];
   const trend: TrendPoint[] = dayKeys.map((d) => ({ label: dayLabel(d), ...Object.fromEntries(memberKeys.map((k) => [k, 0])) }));
   const dayIndex = new Map(dayKeys.map((d, i) => [d, i]));

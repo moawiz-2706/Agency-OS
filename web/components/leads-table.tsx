@@ -15,12 +15,14 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSepa
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StageBadge } from "@/components/stage-badge";
 import { MemberLabel } from "@/components/member-avatar";
+import { OFFER_TITLE, isOfferKey } from "@/lib/offers";
 
 export type LeadRow = {
   id: string; name: string; trade: string | null; city: string | null; region: string | null; stage: Stage;
   owner_id: string | null; score: number | null; tier: string | null; email: string | null; phone: string | null;
   website_domain: string | null; last_touch_at: string | null; next_step: string | null; next_step_at: string | null;
   minutes_spent: number;
+  recommended_offers: { key: string; reasons: string[] }[] | null;
 };
 
 const TIER_DOT: Record<string, string> = { high: "bg-emerald-500", medium: "bg-amber-500", low: "bg-zinc-300" };
@@ -71,7 +73,7 @@ export function LeadsTable({ rows, team }: { rows: LeadRow[]; team: Member[] }) 
       </div>
 
       <div className="overflow-x-auto">
-        <Table className="min-w-[960px]">
+        <Table className="min-w-[1080px]">
           <TableHeader className="bg-muted/40">
             <TableRow>
               <TableHead className="w-10 pl-4">
@@ -82,6 +84,7 @@ export function LeadsTable({ rows, team }: { rows: LeadRow[]; team: Member[] }) 
               <TableHead>Stage</TableHead>
               <TableHead>Owner</TableHead>
               <TableHead className="text-right">Score</TableHead>
+              <TableHead>Top offer</TableHead>
               <TableHead>Contact</TableHead>
               <TableHead>Last touch</TableHead>
               <TableHead>Next step</TableHead>
@@ -109,6 +112,14 @@ export function LeadsTable({ rows, team }: { rows: LeadRow[]; team: Member[] }) 
                       </span>
                     ) : <span className="text-muted-foreground">—</span>}
                   </TableCell>
+                  <TableCell className="max-w-44">
+                    {(() => {
+                      const top = r.recommended_offers?.[0];
+                      return top && isOfferKey(top.key)
+                        ? <span className="block truncate text-xs" title={top.reasons.join(" · ")}>{OFFER_TITLE[top.key]}</span>
+                        : <span className="text-xs text-muted-foreground">—</span>;
+                    })()}
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1.5 text-muted-foreground">
                       <Mail className={cn("size-3.5", r.email ? "text-foreground" : "opacity-30")} aria-label={r.email ? `Email ${r.email}` : "No email"} />
@@ -127,7 +138,7 @@ export function LeadsTable({ rows, team }: { rows: LeadRow[]; team: Member[] }) 
               );
             })}
             {rows.length === 0 && (
-              <TableRow><TableCell colSpan={9} className="py-12 text-center text-muted-foreground">No leads match these filters.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={10} className="py-12 text-center text-muted-foreground">No leads match these filters.</TableCell></TableRow>
             )}
           </TableBody>
         </Table>

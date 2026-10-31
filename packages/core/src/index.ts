@@ -1,7 +1,8 @@
 export * from "./config.js";
 export * from "./signals.js";
 export * from "./scoring.js";
-export { auditWebsite, auditCompanies } from "./audit.js";
+export { auditWebsite, auditCompanies, auditCompany, auditCandidates, auditBatch, failureReason, OfflineError, type AuditOutcome } from "./audit.js";
+export { runPool } from "./pool.js";
 export { applyScore, findLeads, listLeads, getLead, updateLead, type LeadFilter } from "./leads.js";
 export { addContact, suppress, type NewContact } from "./contacts.js";
 export { pipelineSummary } from "./reports.js";
@@ -9,3 +10,6 @@ export { importLeadsCsv, type ImportOptions } from "./import.js";
 export { parseCsv, mapHeaders, toImportRow, normalizePhone, isValidEmailSyntax } from "./csv.js";
 export { verifyEmails, sendBlockers, consentForImport, isRoleAddress, isSuppressed, CASL_BASES, type SendCheck } from "./compliance.js";
 export { regionCode, countryCode, countryForRegion, timezoneFor } from "./geo.js";
+export { OFFERS, OFFER_KEYS, isOfferKey, recommendOffers, type Offer, type OfferKey, type OfferInput } from "./offers.js";
+export { researchReportSchema, gapSchema, reportErrors, saveResearchReport, getResearchInput, listResearchQueue, type ResearchReport } from "./research.js";
+export { RESULT_COLUMNS, planResearchRow, missingResultColumns, importResearchCsv, type ResultRow, type RowPlan, type RowContext } from "./research-import.js";

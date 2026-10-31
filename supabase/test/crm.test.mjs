@@ -1,49 +1,19 @@
-// Runs migrations 0001-0003 in PGlite (real Postgres in WASM) with stand-ins for
+// Runs every migration in PGlite (real Postgres in WASM) with stand-ins for
 // Supabase's auth schema and roles, then checks RLS and the touch trigger.
 // Run: pnpm test:db
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
-import { PGlite } from "@electric-sql/pglite";
+import { createDb, migrationSql, USERS } from "./harness.mjs";
 
-const dir = new URL("../migrations/", import.meta.url);
-const db = new PGlite();
-
-const OWNER = { sub: "00000000-0000-0000-0000-00000000000a", email: "owner@agency.test" };
-const PARTNER = { sub: "00000000-0000-0000-0000-00000000000b", email: "partner@agency.test" };
-const UNLINKED = { sub: "00000000-0000-0000-0000-00000000000c", email: "New.Partner@agency.test" };
-const OUTSIDER = { sub: "00000000-0000-0000-0000-0000000000ff", email: "someone@else.test" };
-
-/** Run queries as a logged-in Supabase user (role authenticated + JWT claims), then switch back. */
-async function as(user, fn) {
-  await db.query(`select set_config('request.jwt.claims', $1, false)`, [JSON.stringify({ sub: user.sub, email: user.email, role: "authenticated" })]);
-  await db.exec("set role authenticated");
-  try { return await fn(); } finally {
-    await db.exec("reset role");
-    await db.query(`select set_config('request.jwt.claims', '', false)`);
-  }
-}
-const rows = async (sql, params) => (await db.query(sql, params)).rows;
+const { OWNER, PARTNER, UNLINKED, OUTSIDER } = USERS;
+let db, as, rows;
 
 let leadA, leadB, partnerId;
 
 before(async () => {
-  await db.exec(`
-    create role anon nologin;
-    create role authenticated nologin;
-    create schema auth;
-    create function auth.uid() returns uuid language sql stable as
-      $$ select nullif(nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub', '')::uuid $$;
-    create function auth.jwt() returns jsonb language sql stable as
-      $$ select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb $$;
-    grant usage on schema public, auth to anon, authenticated;
-    grant execute on all functions in schema auth to anon, authenticated;
-  `);
-  for (const f of readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) {
-    await db.exec(readFileSync(new URL(f, dir), "utf8"));
-  }
+  ({ db, as, rows } = await createDb());
   // Running 0003 twice must be safe.
-  await db.exec(readFileSync(new URL("0003_crm.sql", dir), "utf8"));
+  await db.exec(migrationSql("0003_crm.sql"));
 
   await db.query(`insert into team_members (user_id, email, full_name, role) values ($1, $2, 'Owner', 'owner'), ($3, $4, 'Partner', 'partner'), (null, 'new.partner@agency.test', 'Unlinked', 'partner')`,
     [OWNER.sub, OWNER.email, PARTNER.sub, PARTNER.email]);
