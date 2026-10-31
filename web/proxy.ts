@@ -5,6 +5,15 @@ const PUBLIC = ["/login", "/auth/"];
 
 /** Refresh the Supabase session on every request and send signed-out visitors to /login. */
 export async function proxy(request: NextRequest) {
+  // Supabase sends people to the Site URL when the redirect isn't allow-listed, so a
+  // sign-in code can land on any page. Hand it to the callback instead of losing it.
+  const params = request.nextUrl.searchParams;
+  if (!request.nextUrl.pathname.startsWith("/auth/") && (params.has("code") || params.has("token_hash") || params.has("error_description"))) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/auth/callback";
+    return NextResponse.redirect(url);
+  }
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {

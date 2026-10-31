@@ -23,6 +23,39 @@ Check: **Table Editor** now shows `team_members`, `touches` and `notes`.
 2. **Authentication → URL Configuration**
    - Site URL: `http://localhost:3000` for now (you'll change it in step 7)
    - Redirect URLs: add `http://localhost:3000/**`
+3. **Email links that work in any browser** (Authentication → Emails → Templates). The default links only work
+   in the browser you requested them from, so they fail from the Gmail app. In the **Magic Link** template,
+   replace the link with:
+
+   ```html
+   <a href="{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=email">Sign in to AgencyOS</a>
+   ```
+
+   In the **Reset Password** template:
+
+   ```html
+   <a href="{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=recovery">Choose a new password</a>
+   ```
+
+### Sign in with Google (recommended)
+
+1. **Google Cloud Console** → pick or create a project → **APIs & Services → OAuth consent screen**:
+   - User type: **External**. App name: AgencyOS. Add your email as the support and developer contact.
+   - Publish it, or add each team member's Google address under **Test users**.
+2. **Credentials → Create credentials → OAuth client ID → Web application**:
+   - Authorized JavaScript origins: `http://localhost:3000` and later your Vercel URL
+   - Authorized redirect URI: `https://xcixdsqmodxtfsevtbjq.supabase.co/auth/v1/callback`
+     (Supabase shows this exact URL on its Google provider page)
+   - Copy the **Client ID** and **Client secret**.
+3. **Supabase → Authentication → Sign In / Providers → Google** → enable it, paste the Client ID and secret, then **Save**.
+
+Google sign-in only works for emails that are already on the team (step 3 below), because new sign-ups are off.
+A team member who signs in with Google gets their Google login linked to their existing account automatically.
+
+### Passwords
+
+After signing in once (with Google or an email link), open **Account** at the bottom of the sidebar and set a
+password. From then on, email + password works too. **Forgot password?** on the login page emails a reset link.
 
 ## 3. Create the team
 
@@ -133,6 +166,7 @@ Sign in on the Vercel URL. You're live.
 |---|---|
 | "That email is not on the team" | Add it to `TEAM_EMAILS` and run `node scripts/setup-team.mjs` |
 | Signed in but "Not on the team" | That person's `team_members` row is missing or `active` is false |
-| Link opens the login page again | Open it in the same browser you requested it from, and check the Redirect URLs (steps 2 and 7) |
+| Link opens the login page again | Use **Continue with Google** or a password. For links, update the email templates (step 2.3) and check the Redirect URLs (steps 2 and 7) |
+| "Unsupported provider: provider is not enabled" | Google isn't switched on in Supabase yet (see "Sign in with Google") |
 | Emails stop arriving | Supabase's built-in mailer only sends a few emails per hour. Add your own SMTP under Authentication → Emails |
 | Dashboard is empty | Nothing is logged yet. Log an activity on any lead |
