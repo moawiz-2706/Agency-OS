@@ -44,7 +44,7 @@ const run = await auditBatch({
   onResult: (r: AuditOutcome, done, total) => {
     const pos = `[${String(done).padStart(width(total))}/${total}]`;
     const tier = r.prev_tier && r.prev_tier !== r.tier ? `${r.prev_tier} → ${r.tier}` : r.tier;
-    const detail = r.ok ? `score ${r.score} (${tier})` : `failed: ${failureReason(r.error ?? "")}`;
+    const detail = r.ok ? `score ${r.score} (${tier})${r.offers[0] ? ` · ${r.offers[0].key}` : ""}` : `failed: ${failureReason(r.error ?? "")}`;
     console.log(`${pos} ${r.ok ? "ok  " : "FAIL"} ${r.name.slice(0, 48).padEnd(48)} ${detail}`);
   },
 });
@@ -59,6 +59,7 @@ const reasons = failed.reduce<Record<string, number>>((m, r) => {
   return m;
 }, {});
 const tiers = ok.reduce<Record<string, number>>((m, r) => ((m[r.tier] = (m[r.tier] ?? 0) + 1), m), {});
+const topOffers = ok.reduce<Record<string, number>>((m, r) => (r.offers[0] && (m[r.offers[0].key] = (m[r.offers[0].key] ?? 0) + 1), m), {});
 const moved = ok.filter((r) => r.prev_tier && r.prev_tier !== r.tier).length;
 const secs = Math.round((Date.now() - started) / 1000);
 
@@ -66,6 +67,7 @@ console.log(`
 Done in ${Math.floor(secs / 60)}m ${secs % 60}s
   checked:   ${run.results.length} of ${run.total}
   ok:        ${ok.length}  (high ${tiers.high ?? 0}, medium ${tiers.medium ?? 0}, low ${tiers.low ?? 0}; ${moved} changed tier)
+  top offer: ${Object.entries(topOffers).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`).join(", ") || "none"}
   failed:    ${failed.length}${failed.length ? `  (${Object.entries(reasons).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`).join(", ")})` : ""}`);
 
 if (run.stopped_offline) {

@@ -14,6 +14,7 @@ export type WebsiteSignals = {
   uses_ghl: boolean;          // already on GoHighLevel / LeadConnector
   emails_found: string[];     // published on their own site (CASL-relevant)
   title: string | null;
+  copyright_year: number | null;  // newest year in a ©/Copyright notice; old = site not maintained
 };
 
 // ---------- signal detection ----------
@@ -52,6 +53,17 @@ const PIXELS: Record<string, RegExp> = {
 
 const IGNORE_EMAIL = /\.(png|jpe?g|gif|svg|webp)$|example\.com|sentry|wixpress|domain\.com/;
 
+/** Newest plausible year in a copyright notice ("© 2015–2021 Acme" -> 2021), or null. */
+export function copyrightYear(html: string, now = new Date()): number | null {
+  const text = html.replace(/&copy;|&#169;|&#xa9;/gi, "©");
+  const years: number[] = [];
+  for (const m of text.matchAll(/(?:©|\bcopyright\b)[^0-9<]{0,20}((?:19|20)\d{2})(?:\s*[-–—]\s*((?:19|20)\d{2}))?/gi)) {
+    years.push(Number(m[2] ?? m[1]));
+  }
+  const valid = years.filter((y) => y >= 1995 && y <= now.getFullYear() + 1);
+  return valid.length ? Math.max(...valid) : null;
+}
+
 export function detectSignals(html: string, finalUrl: string): WebsiteSignals {
   const h = html.toLowerCase();
   const hits = (m: Record<string, RegExp>) => Object.keys(m).filter((k) => m[k].test(h));
@@ -82,5 +94,6 @@ export function detectSignals(html: string, finalUrl: string): WebsiteSignals {
     uses_ghl: /leadconnectorhq\.com|msgsndr\.com|gohighlevel/.test(h),
     emails_found: emails,
     title: html.match(/<title[^>]*>([^<]{0,200})/i)?.[1]?.trim() ?? null,
+    copyright_year: copyrightYear(html),
   };
 }

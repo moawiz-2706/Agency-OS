@@ -10,3 +10,4 @@ export { importLeadsCsv, type ImportOptions } from "./import.js";
 export { parseCsv, mapHeaders, toImportRow, normalizePhone, isValidEmailSyntax } from "./csv.js";
 export { verifyEmails, sendBlockers, consentForImport, isRoleAddress, isSuppressed, CASL_BASES, type SendCheck } from "./compliance.js";
 export { regionCode, countryCode, countryForRegion, timezoneFor } from "./geo.js";
+export { OFFERS, OFFER_KEYS, isOfferKey, recommendOffers, type Offer, type OfferKey, type OfferInput } from "./offers.js";

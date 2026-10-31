@@ -1,6 +1,7 @@
 import { db, logActivity, must, selectAll } from "@agencyos/db";
 import { web } from "./adapters.js";
 import { applyScore } from "./leads.js";
+import { recommendOffers, type Offer } from "./offers.js";
 import { runPool } from "./pool.js";
 import { detectSignals } from "./signals.js";
 
@@ -22,8 +23,11 @@ export class OfflineError extends Error {
   constructor() { super("No internet connection"); this.name = "OfflineError"; }
 }
 
+/** How many ranked offers we keep on the lead. */
+const TOP_OFFERS = 3;
+
 export type AuditOutcome = {
-  id: string; name: string; ok: boolean; error?: string;
+  id: string; name: string; ok: boolean; error?: string; offers: Offer[];
   score: number; tier: string; prev_tier: string | null;
   key_findings?: { online_booking: boolean; chat: boolean; ad_pixels: string[]; uses_ghl: boolean; emails_on_site: string[] };
 };
@@ -44,9 +48,10 @@ export async function auditCompany(c: any): Promise<AuditOutcome> {
     signals: audit.ok ? audit.signals : {},
     error: audit.ok ? null : audit.error,
   }));
-  must(await db().from("companies").update({ last_audited_at: new Date().toISOString() }).eq("id", c.id));
+  const offers = recommendOffers({ ...c, signals: audit.ok ? audit.signals : null }).slice(0, TOP_OFFERS);
+  must(await db().from("companies").update({ last_audited_at: new Date().toISOString(), recommended_offers: offers }).eq("id", c.id));
   const score = await applyScore(c, audit.ok ? audit.signals : null);
-  await logActivity(c.id, "audited", { ok: audit.ok, score: score.score });
+  await logActivity(c.id, "audited", { ok: audit.ok, score: score.score, offers: offers.map((o) => o.key) });
   return {
     id: c.id,
     name: c.name,
@@ -55,6 +60,7 @@ export async function auditCompany(c: any): Promise<AuditOutcome> {
     score: score.score,
     tier: score.tier,
     prev_tier: c.tier ?? null,
+    offers,
     key_findings: audit.ok
       ? {
           online_booking: audit.signals.has_online_booking,
