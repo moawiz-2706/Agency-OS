@@ -1,197 +1,270 @@
 import Link from "next/link";
+import type { Metadata } from "next";
+import {
+  AlarmClock, ArrowDownRight, ArrowUpRight, CalendarCheck, Clock, Handshake, MessageSquareReply, Minus, Send, Sparkles,
+  Trophy, Users,
+} from "lucide-react";
 import { supabaseServer } from "@/lib/supabase/server";
 import { teamMembers } from "@/lib/team";
 import {
-  CHANNEL_LABEL, OUTCOME_LABEL, OUTREACH, POSITIVE, STAGE_LABEL, STAGES, memberName,
+  CHANNEL_LABEL, OUTCOME_LABEL, OUTREACH, PALETTE, POSITIVE, STAGE_LABEL, STAGES, memberColor, memberName,
   type Channel, type Outcome, type Stage,
 } from "@/lib/crm";
-import { ago, dateTime, minutes } from "@/lib/format";
+import { TEAM_TZ, ago, dayLabel, minutes, teamDay } from "@/lib/format";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { PageHeader } from "@/components/page-header";
+import { MemberAvatar, MemberLabel } from "@/components/member-avatar";
+import { TimeTrendChart, type TrendPoint } from "@/components/charts/time-trend";
+import { BarList } from "@/components/charts/bar-list";
+import { RangeTabs } from "@/components/range-tabs";
+
+export const metadata: Metadata = { title: "Dashboard" };
 
 type Touch = {
   id: string; company_id: string; member_id: string | null; channel: Channel; outcome: Outcome;
-  minutes: number; summary: string | null; happened_at: string;
-  companies: { name: string } | null;
+  minutes: number; summary: string | null; happened_at: string; companies: { name: string } | null;
 };
 
-const RANGES = [7, 30, 90];
+const RANGES = [7, 30, 90] as const;
 
 export default async function Dashboard({ searchParams }: { searchParams: Promise<{ days?: string }> }) {
-  const days = RANGES.includes(Number((await searchParams).days)) ? Number((await searchParams).days) : 7;
-  const since = new Date(Date.now() - days * 86400_000).toISOString();
+  const asked = Number((await searchParams).days);
+  const days = (RANGES as readonly number[]).includes(asked) ? asked : 7;
+  const now = Date.now();
+  const since = new Date(now - days * 86400_000).toISOString();
+  const prevSince = new Date(now - 2 * days * 86400_000).toISOString();
   const supabase = await supabaseServer();
 
   const [team, touchesRes, leadsRes, stageRes, overdueRes, latestRes] = await Promise.all([
     teamMembers(),
     supabase.from("touches").select("id,company_id,member_id,channel,outcome,minutes,summary,happened_at,companies(name)")
-      .gte("happened_at", since).order("happened_at", { ascending: false }).limit(5000),
+      .gte("happened_at", prevSince).order("happened_at", { ascending: false }).limit(10000),
     supabase.from("companies").select("id", { count: "exact", head: true }),
     supabase.from("v_stage_counts").select("stage,owner_id,leads,minutes"),
     supabase.from("companies").select("id,name,next_step,next_step_at,owner_id")
-      .lt("next_step_at", new Date().toISOString()).not("stage", "in", "(won,lost,disqualified)")
-      .order("next_step_at").limit(15),
+      .lt("next_step_at", new Date(now).toISOString()).not("stage", "in", "(won,lost,disqualified)")
+      .order("next_step_at").limit(8),
     supabase.from("touches").select("id,company_id,member_id,channel,outcome,minutes,summary,happened_at,companies(name)")
-      .order("happened_at", { ascending: false }).limit(15),
+      .order("happened_at", { ascending: false }).limit(8),
   ]);
 
-  const touches = (touchesRes.data ?? []) as unknown as Touch[];
+  const all = (touchesRes.data ?? []) as unknown as Touch[];
+  const cur = all.filter((t) => t.happened_at >= since);
+  const prev = all.filter((t) => t.happened_at < since);
   const stageRows = (stageRes.data ?? []) as { stage: Stage; owner_id: string | null; leads: number; minutes: number }[];
-  const byId = new Map(team.map((m) => [m.id, m]));
 
-  // Distinct leads per outcome in the period.
-  const leadsWith = (pred: (t: Touch) => boolean) => new Set(touches.filter(pred).map((t) => t.company_id)).size;
+  // ---- KPIs, each against the period before ----
+  const leadsWith = (ts: Touch[], pred: (t: Touch) => boolean) => new Set(ts.filter(pred).map((t) => t.company_id)).size;
+  const metric = (pred: (t: Touch) => boolean) => ({ cur: leadsWith(cur, pred), prev: leadsWith(prev, pred) });
+  const sumMin = (ts: Touch[]) => ts.reduce((n, t) => n + t.minutes, 0);
   const kpis = [
-    { label: "Leads", value: (leadsRes.count ?? 0).toLocaleString(), hint: "all time" },
-    { label: "Contacted", value: leadsWith((t) => OUTREACH.includes(t.channel)) },
-    { label: "Replied", value: leadsWith((t) => t.outcome === "replied") },
-    { label: "Interested", value: leadsWith((t) => t.outcome === "interested") },
-    { label: "Meetings", value: leadsWith((t) => t.outcome === "meeting_booked") },
-    { label: "Won", value: leadsWith((t) => t.outcome === "won") },
-    { label: "Time spent", value: minutes(touches.reduce((n, t) => n + t.minutes, 0)) },
-    { label: "Touches", value: touches.length },
+    { label: "Contacted", icon: Send, ...metric((t) => OUTREACH.includes(t.channel)), fmt: String },
+    { label: "Replied", icon: MessageSquareReply, ...metric((t) => t.outcome === "replied"), fmt: String },
+    { label: "Interested", icon: Sparkles, ...metric((t) => t.outcome === "interested"), fmt: String },
+    { label: "Meetings", icon: CalendarCheck, ...metric((t) => t.outcome === "meeting_booked"), fmt: String },
+    { label: "Won", icon: Trophy, ...metric((t) => t.outcome === "won"), fmt: String },
+    { label: "Time spent", icon: Clock, cur: sumMin(cur), prev: sumMin(prev), fmt: minutes },
+    { label: "Touches", icon: Handshake, cur: cur.length, prev: prev.length, fmt: String },
   ];
 
-  // Where our time goes, per partner.
+  // ---- time per day, stacked by member ----
+  const dayKeys: string[] = [];
+  for (let i = days - 1; i >= 0; i--) dayKeys.push(teamDay(new Date(now - i * 86400_000)));
+  const memberKeys = [...team.map((m) => m.id), ...(cur.some((t) => !t.member_id) ? ["none"] : [])];
+  const trend: TrendPoint[] = dayKeys.map((d) => ({ label: dayLabel(d), ...Object.fromEntries(memberKeys.map((k) => [k, 0])) }));
+  const dayIndex = new Map(dayKeys.map((d, i) => [d, i]));
+  for (const t of cur) {
+    const i = dayIndex.get(teamDay(t.happened_at));
+    if (i === undefined) continue;
+    const k = t.member_id ?? "none";
+    trend[i][k] = (Number(trend[i][k]) || 0) + t.minutes;
+  }
+  const series = memberKeys.map((k) => ({
+    key: k, name: k === "none" ? "Unknown" : memberName(team.find((m) => m.id === k)), color: k === "none" ? "#a8a29e" : memberColor(team, k),
+  }));
+
+  // ---- per member table ----
   const owned = new Map<string, number>();
   for (const r of stageRows) if (r.owner_id) owned.set(r.owner_id, (owned.get(r.owner_id) ?? 0) + r.leads);
-  const perMember = [...team.map((m) => m.id), null].map((id) => {
-    const mine = touches.filter((t) => t.member_id === id);
+  const perMember = team.map((m) => {
+    const mine = cur.filter((t) => t.member_id === m.id);
     return {
-      id, name: id ? memberName(byId.get(id)) : "Unknown", color: id ? byId.get(id)?.color : "#94a3b8",
-      minutes: mine.reduce((n, t) => n + t.minutes, 0),
-      touches: mine.length,
-      owned: id ? owned.get(id) ?? 0 : null,
-      contacted: new Set(mine.filter((t) => OUTREACH.includes(t.channel)).map((t) => t.company_id)).size,
+      id: m.id, minutes: sumMin(mine), touches: mine.length, owned: owned.get(m.id) ?? 0,
+      contacted: leadsWith(mine, (t) => OUTREACH.includes(t.channel)),
       positive: mine.filter((t) => POSITIVE.includes(t.outcome)).length,
       meetings: mine.filter((t) => t.outcome === "meeting_booked").length,
     };
-  }).filter((r) => r.id || r.touches);
+  });
+  const teamMinutes = Math.max(1, sumMin(cur));
 
-  const byChannel = Object.entries(touches.reduce<Record<string, { n: number; m: number }>>((acc, t) => {
+  // ---- time by activity ----
+  const byChannel = Object.entries(cur.reduce<Record<string, { n: number; m: number }>>((acc, t) => {
     acc[t.channel] ??= { n: 0, m: 0 };
     acc[t.channel].n++; acc[t.channel].m += t.minutes;
     return acc;
   }, {})).sort((a, b) => b[1].m - a[1].m);
-  const maxChannel = Math.max(1, ...byChannel.map(([, v]) => v.m));
 
-  const pipeline = STAGES.map((s) => ({
-    stage: s,
-    leads: stageRows.filter((r) => r.stage === s).reduce((n, r) => n + r.leads, 0),
-    minutes: stageRows.filter((r) => r.stage === s).reduce((n, r) => n + r.minutes, 0),
-  }));
-  const maxStage = Math.max(1, ...pipeline.map((p) => p.leads));
+  // ---- pipeline now ----
+  const pipeline = STAGES.map((s) => {
+    const rows = stageRows.filter((r) => r.stage === s);
+    return { stage: s, leads: rows.reduce((n, r) => n + r.leads, 0), minutes: rows.reduce((n, r) => n + r.minutes, 0) };
+  }).filter((p) => p.leads > 0);
 
   const overdue = overdueRes.data ?? [];
   const latest = (latestRes.data ?? []) as unknown as Touch[];
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">Dashboard</h1>
-        <div className="flex rounded-md border border-slate-300 bg-white p-0.5 text-sm">
-          {RANGES.map((d) => (
-            <Link key={d} href={`/?days=${d}`}
-              className={`rounded px-3 py-1 ${d === days ? "bg-slate-900 text-white" : "text-slate-600"}`}>{d} days</Link>
-          ))}
-        </div>
-      </div>
+    <>
+      <PageHeader title="Dashboard" description={`${(leadsRes.count ?? 0).toLocaleString()} leads · times in ${TEAM_TZ}`}>
+        <RangeTabs days={days} options={[...RANGES]} />
+      </PageHeader>
 
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
-        {kpis.map((k) => (
-          <div key={k.label} className="card p-3">
-            <div className="text-xs text-slate-500">{k.label}</div>
-            <div className="mt-1 text-2xl font-semibold">{k.value}</div>
-            <div className="text-[11px] text-slate-400">{k.hint ?? `last ${days} days`}</div>
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-7">
+        {kpis.map((k) => {
+          const diff = k.cur - k.prev;
+          const Trend = diff > 0 ? ArrowUpRight : diff < 0 ? ArrowDownRight : Minus;
+          return (
+            <Card key={k.label} className="gap-0 py-4">
+              <CardContent className="px-4">
+                <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+                  {k.label}<k.icon className="size-3.5" />
+                </div>
+                <div className="mt-2 text-2xl font-semibold tabular-nums tracking-tight">{k.fmt(k.cur)}</div>
+                <div className="mt-1 flex items-center gap-0.5 text-[11px] text-muted-foreground">
+                  <Trend className="size-3" />
+                  {diff === 0 ? "same as" : `${diff > 0 ? "+" : "−"}${k.fmt(Math.abs(diff))} vs`} previous {days}d
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </section>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Where our time goes</CardTitle>
+          <CardDescription>Minutes logged per day, by team member</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <TimeTrendChart data={trend} series={series} />
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Member</TableHead>
+                  <TableHead className="text-right">Time</TableHead>
+                  <TableHead className="text-right">Share</TableHead>
+                  <TableHead className="text-right">Touches</TableHead>
+                  <TableHead className="text-right">Leads owned</TableHead>
+                  <TableHead className="text-right">Contacted</TableHead>
+                  <TableHead className="text-right">Positive</TableHead>
+                  <TableHead className="text-right">Meetings</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {perMember.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell><MemberLabel team={team} id={r.id} /></TableCell>
+                    <TableCell className="text-right font-medium tabular-nums">{minutes(r.minutes)}</TableCell>
+                    <TableCell className="text-right tabular-nums text-muted-foreground">{Math.round((r.minutes / teamMinutes) * 100)}%</TableCell>
+                    <TableCell className="text-right tabular-nums">{r.touches}</TableCell>
+                    <TableCell className="text-right tabular-nums">{r.owned}</TableCell>
+                    <TableCell className="text-right tabular-nums">{r.contacted}</TableCell>
+                    <TableCell className="text-right tabular-nums">{r.positive}</TableCell>
+                    <TableCell className="text-right tabular-nums">{r.meetings}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </div>
-        ))}
-      </section>
-
-      <section className="card overflow-x-auto">
-        <h2 className="mb-3 font-medium">Where our time goes</h2>
-        <table className="w-full min-w-[560px] text-sm">
-          <thead className="text-left text-xs text-slate-500">
-            <tr><th className="py-1">Who</th><th>Time</th><th>Touches</th><th>Leads owned</th><th>Contacted</th><th>Positive</th><th>Meetings</th></tr>
-          </thead>
-          <tbody>
-            {perMember.map((r) => (
-              <tr key={r.id ?? "none"} className="border-t border-slate-100">
-                <td className="py-2"><span className="mr-2 inline-block h-2.5 w-2.5 rounded-full" style={{ background: r.color }} />{r.name}</td>
-                <td className="font-medium">{minutes(r.minutes)}</td>
-                <td>{r.touches}</td>
-                <td>{r.owned ?? "—"}</td>
-                <td>{r.contacted}</td>
-                <td>{r.positive}</td>
-                <td>{r.meetings}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <section className="card">
-          <h2 className="mb-3 font-medium">Time by activity</h2>
-          {byChannel.length === 0 && <p className="text-sm text-slate-500">No activity logged in this period.</p>}
-          <ul className="space-y-2 text-sm">
-            {byChannel.map(([ch, v]) => (
-              <li key={ch}>
-                <div className="flex justify-between"><span>{CHANNEL_LABEL[ch as Channel]}</span><span className="text-slate-500">{minutes(v.m)} · {v.n}×</span></div>
-                <div className="mt-1 h-2 rounded bg-slate-100"><div className="h-2 rounded bg-slate-700" style={{ width: `${(v.m / maxChannel) * 100}%` }} /></div>
-              </li>
-            ))}
-          </ul>
-        </section>
+        <Card>
+          <CardHeader>
+            <CardTitle>Time by activity</CardTitle>
+            <CardDescription>Last {days} days</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <BarList color={PALETTE[0]} empty="No activity logged in this period."
+              items={byChannel.map(([ch, v]) => ({
+                key: ch, label: CHANNEL_LABEL[ch as Channel], value: v.m, display: minutes(v.m),
+                detail: `${v.n} ${v.n === 1 ? "touch" : "touches"} · avg ${minutes(Math.round(v.m / v.n))}`,
+              }))} />
+          </CardContent>
+        </Card>
 
-        <section className="card">
-          <h2 className="mb-3 font-medium">Pipeline <span className="text-xs font-normal text-slate-400">now, all time minutes</span></h2>
-          <ul className="space-y-1.5 text-sm">
-            {pipeline.map((p) => (
-              <li key={p.stage}>
-                <Link href={`/leads?stage=${p.stage}`} className="grid grid-cols-[7.5rem_1fr_5.5rem] items-center gap-2 hover:text-slate-600">
-                  <span>{STAGE_LABEL[p.stage]}</span>
-                  <span className="h-2 rounded bg-slate-100"><span className="block h-2 rounded bg-indigo-500" style={{ width: `${(p.leads / maxStage) * 100}%` }} /></span>
-                  <span className="text-right text-slate-500">{p.leads} · {minutes(p.minutes)}</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
+        <Card>
+          <CardHeader>
+            <CardTitle>Pipeline</CardTitle>
+            <CardDescription>Leads in each stage now</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <BarList color={PALETTE[0]} empty="No leads yet."
+              items={pipeline.map((p) => ({
+                key: p.stage, label: STAGE_LABEL[p.stage], value: p.leads, display: p.leads.toLocaleString(),
+                detail: `${minutes(p.minutes)} spent on these leads`, href: `/leads?stage=${p.stage}`,
+              }))} />
+          </CardContent>
+        </Card>
 
-        <section className="card">
-          <h2 className="mb-3 font-medium">Overdue next steps</h2>
-          {overdue.length === 0 && <p className="text-sm text-slate-500">Nothing overdue.</p>}
-          <ul className="divide-y divide-slate-100 text-sm">
-            {overdue.map((c) => (
-              <li key={c.id} className="py-2">
-                <Link href={`/leads/${c.id}`} className="font-medium hover:underline">{c.name}</Link>
-                <div className="text-slate-500">
-                  {c.next_step || "Next step"} · <span className="text-rose-600">due {ago(c.next_step_at)}</span>
-                  {c.owner_id && <> · {memberName(byId.get(c.owner_id))}</>}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><AlarmClock className="size-4" />Overdue next steps</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {overdue.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">Nothing overdue. Nice.</p>
+            ) : (
+              <ul className="divide-y">
+                {overdue.map((c) => (
+                  <li key={c.id} className="flex items-center gap-3 py-2.5">
+                    <MemberAvatar team={team} id={c.owner_id} />
+                    <div className="min-w-0 flex-1">
+                      <Link href={`/leads/${c.id}`} className="block truncate text-sm font-medium hover:underline">{c.name}</Link>
+                      <div className="truncate text-xs text-muted-foreground">{c.next_step || "Follow up"}</div>
+                    </div>
+                    <span className="shrink-0 text-xs font-medium text-destructive">due {ago(c.next_step_at)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
 
-        <section className="card">
-          <h2 className="mb-3 font-medium">Latest activity</h2>
-          {latest.length === 0 && <p className="text-sm text-slate-500">No activity yet. Open a lead and log what you did.</p>}
-          <ul className="divide-y divide-slate-100 text-sm">
-            {latest.map((t) => (
-              <li key={t.id} className="py-2">
-                <div className="flex justify-between gap-2">
-                  <span>
-                    <b>{t.member_id ? memberName(byId.get(t.member_id)) : "Someone"}</b>{" "}
-                    {CHANNEL_LABEL[t.channel].toLowerCase()} · {OUTCOME_LABEL[t.outcome].toLowerCase()} ·{" "}
-                    <Link href={`/leads/${t.company_id}`} className="hover:underline">{t.companies?.name}</Link>
-                  </span>
-                  <span className="shrink-0 text-slate-500">{minutes(t.minutes)}</span>
-                </div>
-                <div className="text-xs text-slate-400">{dateTime(t.happened_at)}{t.summary && ` · ${t.summary.slice(0, 90)}`}</div>
-              </li>
-            ))}
-          </ul>
-        </section>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><Users className="size-4" />Latest activity</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {latest.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">No activity yet. Open a lead and log what you did.</p>
+            ) : (
+              <ul className="divide-y">
+                {latest.map((t) => (
+                  <li key={t.id} className="flex items-start gap-3 py-2.5">
+                    <MemberAvatar team={team} id={t.member_id} />
+                    <div className="min-w-0 flex-1 text-sm">
+                      <div className="truncate">
+                        <span className="font-medium">{memberName(team.find((m) => m.id === t.member_id))}</span>
+                        <span className="text-muted-foreground"> · {CHANNEL_LABEL[t.channel]} · {OUTCOME_LABEL[t.outcome]} · </span>
+                        <Link href={`/leads/${t.company_id}`} className="hover:underline">{t.companies?.name}</Link>
+                      </div>
+                      {t.summary && <div className="truncate text-xs text-muted-foreground">{t.summary}</div>}
+                    </div>
+                    <div className="shrink-0 text-right text-xs">
+                      <div className="font-medium tabular-nums">{minutes(t.minutes)}</div>
+                      <div className="text-muted-foreground">{ago(t.happened_at)}</div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
       </div>
-    </div>
+    </>
   );
 }

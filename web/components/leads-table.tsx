@@ -1,10 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { toast } from "sonner";
+import { Globe, Loader2, Mail, Phone } from "lucide-react";
 import { bulkUpdate } from "@/app/(app)/leads/actions";
-import { STAGE_COLOR, STAGE_LABEL, STAGES, memberName, type Member, type Stage } from "@/lib/crm";
+import { STAGE_LABEL, STAGES, memberName, type Member, type Stage } from "@/lib/crm";
 import { ago, minutes } from "@/lib/format";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { StageBadge } from "@/components/stage-badge";
+import { MemberLabel } from "@/components/member-avatar";
 
 export type LeadRow = {
   id: string; name: string; trade: string | null; city: string | null; region: string | null; stage: Stage;
@@ -13,73 +23,115 @@ export type LeadRow = {
   minutes_spent: number;
 };
 
+const TIER_DOT: Record<string, string> = { high: "bg-emerald-500", medium: "bg-amber-500", low: "bg-zinc-300" };
+
 export function LeadsTable({ rows, team }: { rows: LeadRow[]; team: Member[] }) {
   const [picked, setPicked] = useState<Set<string>>(new Set());
-  const byId = new Map(team.map((m) => [m.id, m]));
+  const [action, setAction] = useState("");
+  const [pending, start] = useTransition();
   const all = rows.length > 0 && picked.size === rows.length;
+  const some = picked.size > 0 && !all;
   const toggle = (id: string) => setPicked((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
+  const apply = () => start(async () => {
+    const f = new FormData();
+    picked.forEach((id) => f.append("ids", id));
+    f.set("bulk_action", action);
+    const res = await bulkUpdate(f);
+    if (res.ok) {
+      toast.success(`Updated ${picked.size} ${picked.size === 1 ? "lead" : "leads"}`);
+      setPicked(new Set());
+      setAction("");
+    } else toast.error(res.error);
+  });
+
   return (
-    <form action={async (f) => { await bulkUpdate(f); setPicked(new Set()); }} className="card overflow-x-auto p-0">
-      {[...picked].map((id) => <input key={id} type="hidden" name="ids" value={id} />)}
-      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 p-3 text-sm">
-        <span className="text-slate-500">{picked.size} selected</span>
-        <select name="bulk_action" className="input py-1" defaultValue="" disabled={!picked.size}>
-          <option value="" disabled>Bulk action…</option>
-          <optgroup label="Assign owner">
-            {team.map((m) => <option key={m.id} value={`owner:${m.id}`}>{memberName(m)}</option>)}
-            <option value="owner:none">Unassigned</option>
-          </optgroup>
-          <optgroup label="Change stage">
-            {STAGES.map((s) => <option key={s} value={`stage:${s}`}>{STAGE_LABEL[s]}</option>)}
-          </optgroup>
-        </select>
-        <button className="btn py-1" disabled={!picked.size}>Apply</button>
+    <Card className="gap-0 overflow-hidden py-0">
+      <div className={cn("flex flex-wrap items-center gap-2 border-b px-4 py-2.5 text-sm transition-colors", picked.size && "bg-accent/50")}>
+        <span className="min-w-20 text-muted-foreground">{picked.size ? `${picked.size} selected` : "Select leads for bulk changes"}</span>
+        <Select value={action} onValueChange={setAction} disabled={!picked.size}>
+          <SelectTrigger size="sm" className="w-48 bg-background"><SelectValue placeholder="Bulk action…" /></SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectLabel>Assign owner</SelectLabel>
+              {team.map((m) => <SelectItem key={m.id} value={`owner:${m.id}`}>{memberName(m)}</SelectItem>)}
+              <SelectItem value="owner:none">Unassigned</SelectItem>
+            </SelectGroup>
+            <SelectSeparator />
+            <SelectGroup>
+              <SelectLabel>Move to stage</SelectLabel>
+              {STAGES.map((s) => <SelectItem key={s} value={`stage:${s}`}>{STAGE_LABEL[s]}</SelectItem>)}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        <Button size="sm" onClick={apply} disabled={!picked.size || !action || pending}>
+          {pending && <Loader2 className="animate-spin" />}Apply
+        </Button>
+        {picked.size > 0 && <Button size="sm" variant="ghost" onClick={() => setPicked(new Set())}>Clear</Button>}
       </div>
-      <table className="w-full min-w-[900px] text-sm">
-        <thead className="bg-slate-50 text-left text-xs text-slate-500">
-          <tr>
-            <th className="w-8 p-2">
-              <input type="checkbox" checked={all} aria-label="Select all on this page"
-                onChange={() => setPicked(all ? new Set() : new Set(rows.map((r) => r.id)))} />
-            </th>
-            <th className="p-2">Lead</th><th>Stage</th><th>Owner</th><th>Score</th>
-            <th>Contact</th><th>Last touch</th><th>Next step</th><th className="pr-3 text-right">Time</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => {
-            const owner = r.owner_id ? byId.get(r.owner_id) : null;
-            const overdue = r.next_step_at && new Date(r.next_step_at) < new Date();
-            return (
-              <tr key={r.id} className="border-t border-slate-100 hover:bg-slate-50">
-                <td className="p-2"><input type="checkbox" checked={picked.has(r.id)} onChange={() => toggle(r.id)} aria-label={`Select ${r.name}`} /></td>
-                <td className="p-2">
-                  <Link href={`/leads/${r.id}`} className="font-medium hover:underline">{r.name}</Link>
-                  <div className="text-xs text-slate-500">{[r.trade, r.city, r.region].filter(Boolean).join(" · ")}</div>
-                </td>
-                <td><span className={`chip ${STAGE_COLOR[r.stage]}`}>{STAGE_LABEL[r.stage]}</span></td>
-                <td>
-                  {owner ? <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: owner.color }} />{memberName(owner)}</span>
-                    : <span className="text-slate-400">—</span>}
-                </td>
-                <td>{r.score ?? "—"}{r.tier && <span className="ml-1 text-xs text-slate-400">{r.tier}</span>}</td>
-                <td className="text-xs">
-                  <div className="max-w-[14rem] truncate">{r.email ?? <span className="text-slate-400">no email</span>}</div>
-                  <div className="text-slate-500">{r.phone ?? ""}</div>
-                </td>
-                <td className="text-xs text-slate-500">{ago(r.last_touch_at)}</td>
-                <td className="text-xs">
-                  <div className="max-w-[12rem] truncate">{r.next_step ?? ""}</div>
-                  {r.next_step_at && <div className={overdue ? "text-rose-600" : "text-slate-500"}>{ago(r.next_step_at)}</div>}
-                </td>
-                <td className="pr-3 text-right">{minutes(r.minutes_spent)}</td>
-              </tr>
-            );
-          })}
-          {rows.length === 0 && <tr><td colSpan={9} className="p-6 text-center text-slate-500">No leads match these filters.</td></tr>}
-        </tbody>
-      </table>
-    </form>
+
+      <div className="overflow-x-auto">
+        <Table className="min-w-[960px]">
+          <TableHeader className="bg-muted/40">
+            <TableRow>
+              <TableHead className="w-10 pl-4">
+                <Checkbox checked={all ? true : some ? "indeterminate" : false} aria-label="Select all on this page"
+                  onCheckedChange={() => setPicked(all ? new Set() : new Set(rows.map((r) => r.id)))} />
+              </TableHead>
+              <TableHead>Lead</TableHead>
+              <TableHead>Stage</TableHead>
+              <TableHead>Owner</TableHead>
+              <TableHead className="text-right">Score</TableHead>
+              <TableHead>Contact</TableHead>
+              <TableHead>Last touch</TableHead>
+              <TableHead>Next step</TableHead>
+              <TableHead className="pr-4 text-right">Time</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((r) => {
+              const overdue = r.next_step_at && new Date(r.next_step_at) < new Date();
+              return (
+                <TableRow key={r.id} data-state={picked.has(r.id) ? "selected" : undefined}>
+                  <TableCell className="pl-4">
+                    <Checkbox checked={picked.has(r.id)} onCheckedChange={() => toggle(r.id)} aria-label={`Select ${r.name}`} />
+                  </TableCell>
+                  <TableCell className="max-w-72">
+                    <Link href={`/leads/${r.id}`} className="block truncate font-medium hover:underline">{r.name}</Link>
+                    <div className="truncate text-xs text-muted-foreground">{[r.trade, r.city, r.region].filter(Boolean).join(" · ")}</div>
+                  </TableCell>
+                  <TableCell><StageBadge stage={r.stage} /></TableCell>
+                  <TableCell className="whitespace-nowrap"><MemberLabel team={team} id={r.owner_id} /></TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {r.score != null ? (
+                      <span className="inline-flex items-center gap-1.5" title={r.tier ? `${r.tier} tier` : undefined}>
+                        <span className={cn("size-1.5 rounded-full", TIER_DOT[r.tier ?? ""] ?? "bg-zinc-300")} />{r.score}
+                      </span>
+                    ) : <span className="text-muted-foreground">—</span>}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                      <Mail className={cn("size-3.5", r.email ? "text-foreground" : "opacity-30")} aria-label={r.email ? `Email ${r.email}` : "No email"} />
+                      <Phone className={cn("size-3.5", r.phone ? "text-foreground" : "opacity-30")} aria-label={r.phone ? `Phone ${r.phone}` : "No phone"} />
+                      <Globe className={cn("size-3.5", r.website_domain ? "text-foreground" : "opacity-30")} aria-label={r.website_domain ?? "No website"} />
+                      <span className="ml-1 max-w-40 truncate text-xs">{r.email ?? r.phone ?? ""}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-xs text-muted-foreground">{ago(r.last_touch_at)}</TableCell>
+                  <TableCell className="max-w-48 text-xs">
+                    <div className="truncate">{r.next_step ?? ""}</div>
+                    {r.next_step_at && <div className={overdue ? "font-medium text-destructive" : "text-muted-foreground"}>{ago(r.next_step_at)}</div>}
+                  </TableCell>
+                  <TableCell className="pr-4 text-right tabular-nums">{minutes(r.minutes_spent)}</TableCell>
+                </TableRow>
+              );
+            })}
+            {rows.length === 0 && (
+              <TableRow><TableCell colSpan={9} className="py-12 text-center text-muted-foreground">No leads match these filters.</TableCell></TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </Card>
   );
 }
