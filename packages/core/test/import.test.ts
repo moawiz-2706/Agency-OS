@@ -35,7 +35,7 @@ test("a row becomes a company and contact with normalised fields", () => {
   assert.equal(r.company.phone_digits, "2145550100");
   assert.equal(r.company.region, "TX");
   assert.equal(r.company.country, "US");
-  assert.equal(r.company.timezone, "America/Chicago");
+  assert.equal(r.company.time_zone, "America/Chicago");
   assert.equal(r.company.review_count, 23);
   assert.equal(r.contact.email, "mike@acmehvac.com");
   assert.equal(r.contact.full_name, "Mike Smith");

@@ -123,7 +123,7 @@ export type ImportRow = {
     postal_code: string | null;
     lat: number | null;
     lng: number | null;
-    timezone: string | null;
+    time_zone: string | null;
     niche: string | null;
     rating: number | null;
     review_count: number | null;
@@ -186,7 +186,7 @@ export function toImportRow(
       postal_code: get("postal_code") ?? null,
       lat: coord(get("lat")),
       lng: coord(get("lng")),
-      timezone: (get("timezone")?.includes("/") ? get("timezone") : null) ?? timezoneFor(country, region),
+      time_zone: (get("timezone")?.includes("/") ? get("timezone") : null) ?? timezoneFor(country, region),
       niche: defaults.niche ?? nicheKey(get("niche")),
       rating: num(get("rating")),
       review_count: num(get("review_count")),
