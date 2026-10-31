@@ -23,11 +23,24 @@ export function isPrivateIp(ip: string): boolean {
   return v === "::1" || v === "::" || v.startsWith("fc") || v.startsWith("fd") || v.startsWith("fe80");
 }
 
+/** Home connections drop lookups under load; a real dead domain fails all three tries. */
+async function lookupWithRetry(host: string, tries = 3) {
+  for (let i = 1; ; i++) {
+    try {
+      return await dns.lookup(host, { all: true });
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (i >= tries || (code !== "ENOTFOUND" && code !== "EAI_AGAIN")) throw e;
+      await new Promise((r) => setTimeout(r, 400 * i));
+    }
+  }
+}
+
 async function assertPublicUrl(raw: string): Promise<URL> {
   const u = new URL(raw);
   if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error("only http/https allowed");
   if (u.port && !["80", "443"].includes(u.port)) throw new Error("non-standard port blocked");
-  const addrs = await dns.lookup(u.hostname, { all: true });
+  const addrs = await lookupWithRetry(u.hostname);
   if (!addrs.length || addrs.some((a) => isPrivateIp(a.address))) {
     throw new Error("host resolves to a private address");
   }
