@@ -7,7 +7,8 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import {
   CONSENT_BASES, NICHES, STARTER_CITIES, STATUSES,
-  addContact, auditCompanies, findLeads, getLead, listLeads, pipelineSummary, suppress, updateLead,
+  addContact, auditCompanies, findLeads, getLead, importLeadsCsv, listLeads, pipelineSummary, suppress,
+  updateLead, verifyEmails,
 } from "@agencyos/core";
 
 // Load .env from the repo root (apps/mcp/{src,dist} -> ../../..), no matter where Claude Desktop starts us.
@@ -64,6 +65,28 @@ server.registerTool(
 
 // ---------------------------------------------------------------
 server.registerTool(
+  "import_leads_csv",
+  {
+    title: "Import leads from CSV",
+    description:
+      "Import businesses and contacts from a CSV on this PC (bought lists, Maps exports, Apollo...). Columns are matched " +
+      "by common header names. Companies are deduped by place ID, website domain and phone; contacts by email per company; " +
+      "suppressed emails are skipped. US emails get a CAN-SPAM basis; Canadian emails stay unsendable unless the source URL " +
+      "is on the business's own site. Run with dry_run first to check the column mapping and counts.",
+    inputSchema: {
+      file_path: z.string().optional().describe("Full path to the CSV, e.g. C:\\Users\\PC\\Downloads\\leads.csv"),
+      csv_text: z.string().max(2_000_000).optional().describe("Or the CSV content itself, for small lists"),
+      niche: z.string().optional().describe(`Set one niche for every row (${Object.keys(NICHES).join(", ")}); otherwise the file's category column is used`),
+      default_country: z.enum(["US", "CA"]).optional().describe("For rows with no country and no recognisable state/province"),
+      us_consent: z.enum(CONSENT_BASES).default("can_spam_b2b"),
+      dry_run: z.boolean().default(false),
+    },
+  },
+  run(importLeadsCsv),
+);
+
+// ---------------------------------------------------------------
+server.registerTool(
   "audit_websites",
   {
     title: "Audit lead websites",
@@ -73,6 +96,7 @@ server.registerTool(
     inputSchema: {
       company_ids: z.array(z.string().uuid()).optional(),
       limit: z.number().int().min(1).max(25).default(10),
+      retry_failed: z.boolean().optional().describe("Re-check leads whose last audit failed (site down, timeout, lost connection)"),
     },
   },
   run(auditCompanies),
@@ -144,6 +168,19 @@ server.registerTool(
     },
   },
   run(addContact),
+);
+
+// ---------------------------------------------------------------
+server.registerTool(
+  "verify_email",
+  {
+    title: "Verify contact emails",
+    description:
+      "Check contacts' emails before outreach: syntax, mail server (MX) and suppression list. Stores valid / risky (role " +
+      "address like info@) / invalid on each contact and says whether it can legally be emailed, and if not, why.",
+    inputSchema: { contact_ids: z.array(z.string().uuid()).min(1).max(25) },
+  },
+  run(({ contact_ids }) => verifyEmails(contact_ids)),
 );
 
 // ---------------------------------------------------------------

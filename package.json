@@ -6,11 +6,23 @@
   "license": "UNLICENSED",
   "type": "module",
   "packageManager": "pnpm@12.16.1",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "pnpm -r build",
-    "test": "pnpm -r test",
+    "test": "pnpm -r test && pnpm test:db",
     "dev": "pnpm --filter @agencyos/mcp dev",
-    "start": "pnpm --filter @agencyos/mcp start"
+    "start": "pnpm --filter @agencyos/mcp start",
+    "test:db": "node --test supabase/test/*.test.mjs",
+    "setup-team": "node scripts/setup-team.mjs",
+    "import-leads": "node scripts/import-leads.mjs"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.3.15"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.118.0",
+    "dotenv": "18.0.9"
   }
 }

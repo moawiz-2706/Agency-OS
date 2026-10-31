@@ -12,6 +12,8 @@ export type ScoreInput = {
   website: string | null;
   rating: number | null;
   review_count: number | null;
+  /** False when the source has no review data (most CSVs): skip the review rule instead of reading null as 0. */
+  reviews_known?: boolean;
   signals?: WebsiteSignals | null;
 };
 
@@ -33,11 +35,13 @@ export function scoreLead(c: ScoreInput): ScoreResult {
   add(20, "Target niche, operating business");
   if (c.phone) add(5, "Has a phone line (missed-call text-back fits)");
 
-  // Reputation gap -> review automation
-  const reviews = c.review_count ?? 0;
-  if (reviews < 50) add(15, `Only ${reviews} Google reviews`);
-  else if (reviews < 150) add(8, `${reviews} Google reviews, room to grow`);
-  else if (reviews > 1000) add(-10, `${reviews} reviews — likely large / already has systems`);
+  // Reputation gap -> review automation. Google omits the count when there are none.
+  if (c.reviews_known !== false || c.review_count != null) {
+    const reviews = c.review_count ?? 0;
+    if (reviews < 50) add(15, `Only ${reviews} Google reviews`);
+    else if (reviews < 150) add(8, `${reviews} Google reviews, room to grow`);
+    else if (reviews > 1000) add(-10, `${reviews} reviews — likely large / already has systems`);
+  }
 
   if (c.rating != null && c.rating < 4.3) add(10, `Rating ${c.rating} below 4.3`);
 

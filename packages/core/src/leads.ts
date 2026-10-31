@@ -9,7 +9,7 @@ import type { WebsiteSignals } from "./signals.js";
 const LIST_COLS = "id,name,niche,city,region,country,phone,website,rating,review_count,status,score,tier";
 
 export async function applyScore(company: any, signals: WebsiteSignals | null) {
-  const result = scoreLead({ ...company, signals });
+  const result = scoreLead({ ...company, reviews_known: company.source === "google_places", signals });
   const update: Record<string, unknown> = {
     score: result.score,
     tier: result.tier,

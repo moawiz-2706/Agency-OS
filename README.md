@@ -11,6 +11,8 @@ You ──► Claude Desktop (Pro) ──► AgencyOS MCP server (this repo, run
                                      └─► Supabase Postgres  (store everything)
 ```
 
+**Team CRM (web app):** see [`docs/GO-LIVE.md`](docs/GO-LIVE.md) to set up the team, import leads and deploy `web/` to Vercel.
+
 ## Repo layout (pnpm workspace)
 
 | Path | What lives there |
@@ -19,6 +21,8 @@ You ──► Claude Desktop (Pro) ──► AgencyOS MCP server (this repo, run
 | `packages/adapters` | Outside services behind interfaces: `LeadSource` (Google Places), SSRF-safe web fetch |
 | `packages/db` | Supabase client and helpers |
 | `apps/mcp` | The MCP server: tool definitions only, each one calls `core` |
+| `web` | Team CRM (Next.js, deployed to Vercel). Standalone npm app, uses the logged-in user's session + RLS |
+| `scripts` | `setup-team.mjs`, `import-leads.mjs`: admin scripts run on your PC with the service key |
 | `supabase/migrations` | SQL migrations, numbered, never edited after they run |
 
 See `SPEC.md` for the full Phase 1 system design and milestones, and `docs/SPEC-v0.1.md` for the v0.1 scoring rules.
@@ -29,7 +33,8 @@ See `SPEC.md` for the full Phase 1 system design and milestones, and `docs/SPEC-
 
 1. Go to supabase.com → **New project**. Pick a region close to your leads (e.g. East US).
 2. Open **SQL Editor → New query**, paste all of `supabase/migrations/0001_init.sql`, click **Run**.
-   It's safe to run again.
+   Then do the same with `0002_phase1.sql`, and each later file in number order.
+   Each one is safe to run again.
 3. **Project Settings → API**: copy the **Project URL** and the **service_role / secret key**.
 
 > The service-role key bypasses security. Keep it only in `.env` on your machine.
@@ -84,10 +89,11 @@ Claude Desktop → **Settings → Developer → Edit Config**. This opens `claud
 ```
 
 Fully quit and reopen Claude Desktop. **agencyos** should show up in the tools/connectors menu
-with 9 tools. The server reads keys from `agencyos/.env` (the repo root), so you don't need to put keys in this file.
+with 11 tools. The server reads keys from `agencyos/.env` (the repo root), so you don't need to put keys in this file.
 
 ## 5. Use it — example prompts
 
+- *"Dry-run import of C:\Users\PC\Downloads\leads.csv, then import it if the columns look right."*
 - *"Find 20 HVAC companies in Dallas, TX and save them."*
 - *"Audit the websites of the leads you just found."*
 - *"Show me high-tier leads in Texas with fewer than 50 reviews."*
@@ -104,11 +110,13 @@ less of your Pro limit per lead.
 |---|---|
 | `list_niches_and_markets` | Niche presets + starter cities |
 | `find_leads` | Google Places search → dedupe → save → first score |
+| `import_leads_csv` | Import a CSV of businesses + contacts (dedupe, suppression, consent basis). Try `dry_run` first |
 | `audit_websites` | Homepage check (booking, chat, ad pixels, GHL, emails) → re-score |
 | `list_leads` | Filter by status / tier / niche / city / score |
 | `get_lead` | Full record + score reasons + audit + contacts + history |
 | `update_lead` | Change status, add notes (logged) |
 | `add_contact` | Save a person/email with source + consent basis |
+| `verify_email` | Syntax + mail server + suppression check; says if a contact can legally be emailed |
 | `suppress` | Never-contact list (email or domain) |
 | `pipeline_summary` | Counts per stage + recent searches |
 

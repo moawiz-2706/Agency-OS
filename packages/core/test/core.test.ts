@@ -31,3 +31,10 @@ test("closed business is disqualified", () => {
   const r = scoreLead({ ...base, business_status: "CLOSED_PERMANENTLY" });
   assert.equal(statusForScore(r), "disqualified");
 });
+
+test("missing review data (CSV) is not scored as zero reviews", () => {
+  const unknown = scoreLead({ ...base, rating: null, review_count: null, reviews_known: false });
+  assert.ok(!unknown.reasons.some((r) => r.reason.includes("reviews")));
+  const google = scoreLead({ ...base, rating: null, review_count: null });
+  assert.ok(google.reasons.some((r) => r.reason === "Only 0 Google reviews"));
+});

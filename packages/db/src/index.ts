@@ -19,9 +19,20 @@ export function db(): SupabaseClient {
   return client;
 }
 
-export async function logActivity(companyId: string | null, type: string, payload: object = {}) {
-  const { error } = await db().from("activities").insert({ company_id: companyId, type, payload });
+export type Actor = "claude" | "user" | "system";
+
+export async function logActivity(companyId: string | null, type: string, payload: object = {}, actor: Actor = "claude") {
+  const { error } = await db().from("activities").insert({ company_id: companyId, type, payload, actor });
   if (error) console.error("activity log failed:", error.message);
+}
+
+/** One insert for many rows, e.g. a CSV import. */
+export async function logActivities(rows: { company_id: string | null; type: string; payload?: object; actor?: Actor }[]) {
+  for (let i = 0; i < rows.length; i += 500) {
+    const chunk = rows.slice(i, i + 500).map((r) => ({ payload: {}, actor: "claude", ...r }));
+    const { error } = await db().from("activities").insert(chunk);
+    if (error) console.error("activity log failed:", error.message);
+  }
 }
 
 export function must<T>(res: { data: T | null; error: { message: string } | null }): T {
