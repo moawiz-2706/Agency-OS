@@ -1,4 +1,4 @@
-import { env } from "./config.js";
+import { normalizeDomain, type LeadSearch, type LeadSource, type Place } from "./lead-source.js";
 
 // Google Places API (New) — Text Search
 // https://developers.google.com/maps/documentation/places/web-service/text-search
@@ -41,36 +41,6 @@ type RawPlace = {
   googleMapsUri?: string;
 };
 
-export type Place = {
-  google_place_id: string;
-  name: string;
-  address: string | null;
-  city: string | null;
-  region: string | null;
-  country: string | null;
-  postal_code: string | null;
-  lat: number | null;
-  lng: number | null;
-  phone: string | null;
-  website: string | null;
-  website_domain: string | null;
-  rating: number | null;
-  review_count: number | null;
-  business_status: string | null;
-  types: string[];
-  primary_type: string | null;
-  google_maps_uri: string | null;
-};
-
-export function normalizeDomain(url?: string | null): string | null {
-  if (!url) return null;
-  try {
-    return new URL(url).hostname.toLowerCase().replace(/^www\./, "");
-  } catch {
-    return null;
-  }
-}
-
 function component(cs: AddressComponent[] | undefined, type: string, short = false) {
   const c = cs?.find((x) => x.types.includes(type));
   return c ? (short ? c.shortText : c.longText) : null;
@@ -101,39 +71,41 @@ export function toPlace(p: RawPlace): Place {
 }
 
 /** Text search with pagination (Google returns max 20 per page, ~60 total). */
-export async function searchPlaces(opts: {
-  query: string;
-  regionCode: "US" | "CA";
-  maxResults: number;
-}): Promise<Place[]> {
-  const out: Place[] = [];
-  let pageToken: string | undefined;
+export class GooglePlacesSource implements LeadSource {
+  readonly name = "google_places";
 
-  while (out.length < opts.maxResults) {
-    const body: Record<string, unknown> = {
-      textQuery: opts.query,
-      regionCode: opts.regionCode,
-      pageSize: Math.min(20, opts.maxResults - out.length),
-    };
-    if (pageToken) body.pageToken = pageToken;
+  constructor(private readonly apiKey: string) {}
 
-    const res = await fetch(ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Goog-Api-Key": env("GOOGLE_PLACES_API_KEY"),
-        "X-Goog-FieldMask": FIELD_MASK,
-      },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      throw new Error(`Google Places ${res.status}: ${(await res.text()).slice(0, 400)}`);
+  async search(opts: LeadSearch): Promise<Place[]> {
+    const out: Place[] = [];
+    let pageToken: string | undefined;
+
+    while (out.length < opts.maxResults) {
+      const body: Record<string, unknown> = {
+        textQuery: opts.query,
+        regionCode: opts.regionCode,
+        pageSize: Math.min(20, opts.maxResults - out.length),
+      };
+      if (pageToken) body.pageToken = pageToken;
+
+      const res = await fetch(ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": this.apiKey,
+          "X-Goog-FieldMask": FIELD_MASK,
+        },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        throw new Error(`Google Places ${res.status}: ${(await res.text()).slice(0, 400)}`);
+      }
+      const json = (await res.json()) as { places?: RawPlace[]; nextPageToken?: string };
+      for (const p of json.places ?? []) out.push(toPlace(p));
+      pageToken = json.nextPageToken;
+      if (!pageToken || !json.places?.length) break;
+      await new Promise((r) => setTimeout(r, 1500)); // token needs a moment to become valid
     }
-    const json = (await res.json()) as { places?: RawPlace[]; nextPageToken?: string };
-    for (const p of json.places ?? []) out.push(toPlace(p));
-    pageToken = json.nextPageToken;
-    if (!pageToken || !json.places?.length) break;
-    await new Promise((r) => setTimeout(r, 1500)); // token needs a moment to become valid
+    return out.slice(0, opts.maxResults);
   }
-  return out.slice(0, opts.maxResults);
 }
