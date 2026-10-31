@@ -164,7 +164,18 @@ settings:
 
 importers:
 
-  .: {}
+  .:
+    dependencies:
+      '@supabase/supabase-js':
+        specifier: 2.118.0
+        version: 2.118.0
+      dotenv:
+        specifier: 18.0.9
+        version: 18.0.9
+    devDependencies:
+      '@electric-sql/pglite':
+        specifier: 0.3.15
+        version: 0.3.15
 
   apps/mcp:
     dependencies:
@@ -239,6 +250,9 @@ importers:
         version: 7.0.2
 
 packages:
+
+  '@electric-sql/pglite@0.3.15':
+    resolution: {integrity: sha512-Cj++n1Mekf9ETfdc16TlDi+cDDQF0W7EcbyRHYOAeZdsAe8M/FJg18itDTSwyHfar2WIezawM9o0EKaRGVKygQ==}
 
   '@esbuild/aix-ppc64@0.28.2':
     resolution: {integrity: sha512-XExcO+dvLKvVtNTibSTBej1NCAbaGhWn9Ww1ZPx80qsahhPFe/8jgWP0IchNe0F3HwkU7n8ejhH8bjonqht8mQ==}
@@ -957,6 +971,8 @@ packages:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
 snapshots:
+
+  '@electric-sql/pglite@0.3.15': {}
 
   '@esbuild/aix-ppc64@0.28.2':
     optional: true
