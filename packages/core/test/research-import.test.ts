@@ -19,7 +19,7 @@ function row(over: Partial<ResultRow> = {}): ResultRow {
     offer_reason: "They pay for Meta ads but leads can only call or fill a form.",
     email_hook: "Saw you offer 24/7 AC repair in Tempe but there's no way to book online.",
     discovery_questions: "How do you handle after-hours calls? | Who replies to form leads? | How many jobs come from ads?",
-    fit_score: "85", confidence: "0.8", website_quality: "dated", research_notes: "Checked site + GBP",
+    fit_score: "85", confidence: "0.8", website_quality: "dated", research_notes: "Checked site + GBP", researched_at: "2026-11-01",
     ...over,
   };
 }
@@ -127,4 +127,53 @@ test("reviews are only taken when a reviews_source_url is given", () => {
 test("the header check names missing columns", () => {
   assert.deepEqual(missingResultColumns([...RESULT_COLUMNS]), []);
   assert.deepEqual(missingResultColumns(RESULT_COLUMNS.filter((c) => c !== "fit_score")), ["fit_score"]);
+});
+
+// ---- column alignment: AI tools sometimes drop or add a cell ----
+import { alignResultRow } from "../src/research-import.js";
+
+const HEADER = [...RESULT_COLUMNS];
+const cellsOf = (r: ResultRow) => RESULT_COLUMNS.map((c) => r[c]);
+
+test("a row with the right column count maps straight through", () => {
+  const a = alignResultRow(cellsOf(row()), HEADER);
+  assert.ok("row" in a && !a.repaired);
+});
+
+test("a missing gap cell is repaired by re-pairing gaps with their URLs", () => {
+  const cells = cellsOf(row({ gap_3: "", gap_3_evidence_url: "" }));
+  cells.splice(32, 1);                            // drop one gap cell: 42 columns
+  const a = alignResultRow(cells, HEADER);
+  assert.ok("row" in a, "error" in a ? a.error : "");
+  assert.equal(a.repaired, true);
+  assert.equal(a.row.gap_2_evidence_url, "https://acme.example");
+  assert.equal(a.row.recommended_offer, "speed_to_lead");
+  assert.equal(a.row.confidence, "0.8");
+  assert.equal(a.row.researched_at, row().researched_at);
+});
+
+test("an extra cell in the gap area is repaired too", () => {
+  const cells = cellsOf(row());
+  cells.splice(30, 0, "unknown");                 // 44 columns
+  const a = alignResultRow(cells, HEADER);
+  assert.ok("row" in a);
+  assert.deepEqual([a.row.gap_1, a.row.gap_2, a.row.gap_2_evidence_url], [row().gap_1, row().gap_2, "https://acme.example"]);
+});
+
+test("a slip early in the row is rejected, never guessed", () => {
+  const cells = cellsOf(row());
+  cells.splice(9, 1);                             // drops no_unsolicited_email_notice: everything after shifts
+  const a = alignResultRow(cells, HEADER);
+  assert.ok("error" in a);
+  assert.match(a.error, /42 columns instead of 43/);
+});
+
+test("several emails in one cell: the first valid one is used", () => {
+  const p = ok(planResearchRow(row({ best_email: "mike@acme.example|aj@acme.example" }), ctx(), "f"));
+  assert.equal(p.contacts[0].email, "mike@acme.example");
+});
+
+test("several owners in one cell become separate owner contacts", () => {
+  const p = ok(planResearchRow(row({ owner_name: "Derek Peacock|Cody Steeves", best_email: "" }), ctx(), "f"));
+  assert.deepEqual(p.contacts.map((c) => c.full_name), ["Derek Peacock", "Cody Steeves"]);
 });
