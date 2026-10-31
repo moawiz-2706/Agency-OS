@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { KanbanSquare, LayoutDashboard, LogOut, Menu, Users } from "lucide-react";
+import { KanbanSquare, LayoutDashboard, LogOut, Menu, UserCog, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -56,6 +56,9 @@ function UserCard({ me }: { me: Me }) {
         <div className="truncate text-sm font-medium">{me.name}</div>
         <div className="truncate text-xs text-muted-foreground capitalize">{me.role}</div>
       </div>
+      <Button variant="ghost" size="icon" asChild aria-label="Account" title="Account">
+        <Link href="/account"><UserCog /></Link>
+      </Button>
       <form action="/auth/signout" method="post">
         <Button type="submit" variant="ghost" size="icon" aria-label="Sign out" title="Sign out">
           <LogOut />
