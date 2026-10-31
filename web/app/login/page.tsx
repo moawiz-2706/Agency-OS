@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 
 const ERRORS: Record<string, string> = {
-  not_on_team: "That account is not on the team. Ask the owner to add your email.",
+  not_on_team: "Sign-ups are closed for that email. Ask the owner to add you.",
   other_browser: "That link was opened in a different browser from the one you asked from. Sign in with Google or your password instead.",
   expired: "That link has expired or was already used. Sign in with Google or your password, or send a new link.",
   failed: "Sign-in didn't complete. Please try again.",
@@ -73,7 +73,8 @@ function LoginForm() {
       return;
     }
     const { error } = mode === "link"
-      ? await supabase.auth.signInWithOtp({ email: cleanEmail, options: { shouldCreateUser: false, emailRedirectTo: callback } })
+      // New emails may sign in; they wait on an approval screen until the owner activates them.
+      ? await supabase.auth.signInWithOtp({ email: cleanEmail, options: { shouldCreateUser: true, emailRedirectTo: callback } })
       : await supabase.auth.resetPasswordForEmail(cleanEmail, { redirectTo: `${callback}?next=/account` });
     setBusy(null);
     if (error) setError(/signups not allowed|not found|user/i.test(error.message) ? ERRORS.not_on_team : error.message);
@@ -159,7 +160,7 @@ export default function LoginPage() {
           </CardHeader>
           <Suspense><LoginForm /></Suspense>
         </Card>
-        <p className="text-center text-xs text-muted-foreground">Team members only.</p>
+        <p className="text-center text-xs text-muted-foreground">Team members only. New accounts need the owner&apos;s approval.</p>
       </div>
     </main>
   );
