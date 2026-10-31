@@ -5,8 +5,8 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import {
   CONSENT_BASES, NICHES, STARTER_CITIES, STATUSES,
-  addContact, auditCompanies, findLeads, getLead, importLeadsCsv, listLeads, pipelineSummary, suppress,
-  updateLead, verifyEmails,
+  OFFERS, addContact, auditCompanies, findLeads, getLead, getResearchInput, importLeadsCsv, listLeads,
+  listResearchQueue, pipelineSummary, researchReportSchema, saveResearchReport, suppress, updateLead, verifyEmails,
 } from "@agencyos/core";
 
 // IMPORTANT: stdio transport uses stdout for protocol messages.
@@ -94,6 +94,44 @@ server.registerTool(
     },
   },
   run(auditCompanies),
+);
+
+// ---------------------------------------------------------------
+server.registerTool(
+  "list_research_queue",
+  {
+    title: "Research queue",
+    description: "Audited leads with no research report yet, highest score first, with their top recommended offer.",
+    inputSchema: { limit: z.number().int().min(1).max(25).default(10) },
+  },
+  run(listResearchQueue),
+);
+
+// ---------------------------------------------------------------
+server.registerTool(
+  "get_research_input",
+  {
+    title: "Get research input",
+    description:
+      "Everything needed to research one lead: company facts, the latest website audit signals, recommended offers " +
+      "(with reasons), contacts and the offer catalogue. Compact; no raw HTML.",
+    inputSchema: { company_id: z.string().uuid() },
+  },
+  run(({ company_id }) => getResearchInput(company_id)),
+);
+
+// ---------------------------------------------------------------
+server.registerTool(
+  "save_research_report",
+  {
+    title: "Save research report",
+    description:
+      "Store a research report for one lead. Separate observed facts (seen, with URL) from inferred ones. EVERY gap " +
+      "needs an evidence_url or the report is rejected. recommended_offer must be one of: " +
+      `${Object.keys(OFFERS).join(", ")}. Moves the lead from new to researching.`,
+    inputSchema: researchReportSchema.omit({ source: true, raw: true }).shape,
+  },
+  run((report) => saveResearchReport({ ...report, source: "claude" })),
 );
 
 // ---------------------------------------------------------------
