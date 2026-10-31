@@ -342,7 +342,7 @@ export async function importResearchCsv(text: string, opts: { sourceName: string
     file: opts.sourceName,
     dry_run: !!opts.dryRun,
     rows: data.length,
-    repaired: repaired.length,
+    repaired: ok.filter((p) => repaired.includes(p.lead_id)).length,   // realigned rows that were actually imported
     imported: ok.filter((p) => p.action === "insert").length,
     updated: ok.filter((p) => p.action === "update").length,
     skipped: plans.filter((p) => p.kind === "skip") as Extract<RowPlan, { kind: "skip" }>[],
