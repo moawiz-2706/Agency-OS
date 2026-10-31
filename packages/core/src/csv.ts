@@ -46,7 +46,10 @@ const ALIASES: Record<string, string[]> = {
   region: ["state", "region", "province", "stateprovince", "st", "statecode"],
   country: ["country", "countrycode"],
   postal_code: ["zip", "zipcode", "postalcode", "postcode", "postal"],
-  niche: ["niche", "category", "industry", "type", "businesstype", "maincategory"],
+  niche: ["niche", "trade", "category", "industry", "type", "businesstype", "maincategory"],
+  timezone: ["timezone", "tz"],
+  lat: ["lat", "latitude"],
+  lng: ["lng", "lon", "long", "longitude"],
   rating: ["rating", "googlerating", "stars", "averagerating"],
   review_count: ["reviews", "reviewcount", "numberofreviews", "googlereviews", "userratingcount", "reviewscount"],
   google_place_id: ["placeid", "googleplaceid"],
@@ -97,6 +100,14 @@ const num = (v?: string) => {
   return Number.isFinite(n) && v.trim() !== "" ? n : null;
 };
 
+const coord = (v?: string) => {
+  const n = v ? Number(v) : NaN;
+  return Number.isFinite(n) ? n : null;
+};
+
+/** "Pest control" -> "pest_control", matching the niche preset keys. */
+export const nicheKey = (v?: string) => v?.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") || null;
+
 export type ImportRow = {
   line: number;
   company: {
@@ -110,6 +121,8 @@ export type ImportRow = {
     region: string | null;
     country: "US" | "CA" | null;
     postal_code: string | null;
+    lat: number | null;
+    lng: number | null;
     timezone: string | null;
     niche: string | null;
     rating: number | null;
@@ -171,8 +184,10 @@ export function toImportRow(
       region,
       country,
       postal_code: get("postal_code") ?? null,
-      timezone: timezoneFor(country, region),
-      niche: defaults.niche ?? get("niche")?.toLowerCase() ?? null,
+      lat: coord(get("lat")),
+      lng: coord(get("lng")),
+      timezone: (get("timezone")?.includes("/") ? get("timezone") : null) ?? timezoneFor(country, region),
+      niche: defaults.niche ?? nicheKey(get("niche")),
       rating: num(get("rating")),
       review_count: num(get("review_count")),
       google_place_id: get("google_place_id") ?? null,

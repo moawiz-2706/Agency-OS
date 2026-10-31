@@ -100,7 +100,10 @@ export async function importLeadsCsv(opts: ImportOptions) {
   }
 
   const scored = newCompanies.map((c) => {
-    const s = scoreLead({ business_status: null, phone: c.phone, website: c.website, rating: c.rating, review_count: c.review_count, signals: null });
+    const s = scoreLead({
+      business_status: null, phone: c.phone, website: c.website, rating: c.rating, review_count: c.review_count,
+      reviews_known: cols.review_count !== undefined, signals: null,
+    });
     return { c, s };
   });
   const countryMissing = newCompanies.filter((c) => !c.country).length;
