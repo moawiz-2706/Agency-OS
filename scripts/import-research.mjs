@@ -32,7 +32,7 @@ try {
 const list = (items, fmt) => items.map((x) => `    ${fmt(x)}`).join("\n");
 console.log(`${r.file}: ${r.rows} row(s)${dryRun ? "  (dry run, nothing saved)" : ""}
 
-imported:        ${r.imported}
+imported:        ${r.imported}${r.repaired ? `  (${r.repaired} row(s) had a slipped gap column and were realigned)` : ""}
 updated:         ${r.updated}${r.updated ? "  (re-import: latest external research replaced)" : ""}
 skipped:         ${r.skipped.length}${r.skipped.length ? "\n" + list(r.skipped, (s) => `${s.lead_id}: ${s.reason}`) : ""}
 rejected:        ${r.rejected.length}${r.rejected.length ? "\n" + list(r.rejected, (s) => `${s.lead_id}: ${s.reason}`) : ""}

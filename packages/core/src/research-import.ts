@@ -165,7 +165,8 @@ export function planResearchRow(row: ResultRow, ctx: RowContext, sourceName: str
 
   // ---- contacts: only facts published on their own site, never overwriting ----
   const contacts: NewContact[] = [];
-  const email = clean(row.best_email).toLowerCase();
+  // Some tools list several addresses ("office@x.ca|jeremy@x.ca"): use the first valid one.
+  const email = clean(row.best_email).toLowerCase().split(/[|;,\s]+/).find(isValidEmailSyntax) ?? "";
   const emailUrl = clean(row.email_source_url);
   if (email && yes(row.email_on_own_site) && isUrl(emailUrl) && isValidEmailSyntax(email) && !ctx.contactEmails.has(email)) {
     const noSpam = yes(row.no_unsolicited_email_notice);
@@ -179,9 +180,10 @@ export function planResearchRow(row: ResultRow, ctx: RowContext, sourceName: str
   } else if (email && !ctx.contactEmails.has(email)) {
     warnings.push("email not added (needs email_on_own_site=yes and an email_source_url)");
   }
-  const ownerName = clean(row.owner_name);
   const ownerUrl = clean(row.owner_name_source_url);
-  if (ownerName && isUrl(ownerUrl) && !ctx.ownerNames.has(ownerName.toLowerCase())) {
+  const owners = clean(row.owner_name).split(/\s*\|\s*/).map(clean).filter(Boolean);   // "Derek Peacock|Cody Steeves"
+  for (const ownerName of isUrl(ownerUrl) ? owners : []) {
+    if (ctx.ownerNames.has(ownerName.toLowerCase())) continue;
     contacts.push({
       company_id: c.id, full_name: ownerName, role: "owner", email: null, source_url: ownerUrl, source: `research:${sourceName}`,
       consent_basis: "unknown", email_published_publicly: false, do_not_contact: false,
@@ -203,6 +205,59 @@ export function planResearchRow(row: ResultRow, ctx: RowContext, sourceName: str
   };
 }
 
+// ---- column alignment ----
+// AI tools sometimes drop or add a cell, which shifts every later value into the
+// wrong column. A row with the wrong count is only accepted when the slip is
+// inside the gap columns: the 28 columns before them and the 9 after them must
+// still look right, and the gaps are re-paired with their evidence URLs.
+
+const HEAD = 28;   // lead_id .. team_size_estimate
+const TAIL = 9;    // recommended_offer .. researched_at
+const STATUSES = new Set(["active", "closed", "website_down", "not_found", "unknown"]);
+const QUALITIES = new Set(["good", "dated", "poor", "none", "unknown"]);
+const YES_NO = new Set(["yes", "no", "unknown", ""]);
+const offerLike = (v: string) => offerKey(v).ok;
+
+export type AlignedRow = { row: ResultRow; repaired: boolean } | { lead_id: string; error: string };
+
+export function alignResultRow(cells: string[], header: string[]): AlignedRow {
+  const lead_id = (cells[0] ?? "").trim() || "(blank)";
+  const keys = header.map((h) => h.trim().toLowerCase());
+  const toRow = (values: string[], names: readonly string[]) =>
+    Object.fromEntries(RESULT_COLUMNS.map((c) => [c, values[names.indexOf(c)] ?? ""])) as ResultRow;
+
+  if (cells.length === header.length) return { row: toRow(cells, keys), repaired: false };
+
+  const standard = keys.length === RESULT_COLUMNS.length && keys.every((k, i) => k === RESULT_COLUMNS[i]);
+  const n = cells.length;
+  const v = (i: number) => (cells[i] ?? "").trim().toLowerCase();
+  const tail = cells.slice(n - TAIL).map((s) => s.trim());
+  const headOk = STATUSES.has(v(2)) && QUALITIES.has(v(22)) && YES_NO.has(v(24)) && YES_NO.has(v(25));
+  const conf = Number(tail[6]);
+  const tailOk = n >= HEAD + TAIL && /^\d{4}-\d{2}-\d{2}$/.test(tail[8] ?? "") && tail[6] !== "" && conf >= 0 && conf <= 1
+    && /^\d{1,3}$/.test(tail[5] ?? "") && offerLike(tail[0]) && offerLike(tail[1]);
+  if (!standard || !headOk || !tailOk) {
+    return { lead_id, error: `row has ${n} columns instead of ${header.length} and can't be realigned safely (the AI tool dropped or added a column); research this lead again` };
+  }
+
+  // Re-pair the gap cells: each description, followed by its evidence URL when there is one.
+  const middle = cells.slice(HEAD, n - TAIL).map((s) => s.trim());
+  const gaps: [string, string][] = [];
+  for (let i = 0; i < middle.length; i++) {
+    const text = middle[i];
+    if (!clean(text) || isUrl(text)) continue;
+    const next = middle[i + 1] ?? "";
+    gaps.push([text, isUrl(next) ? next : ""]);
+    if (isUrl(next)) i++;
+  }
+  if (gaps.length > 3) return { lead_id, error: `row has ${n} columns and ${gaps.length} gap descriptions; can't tell which is which` };
+
+  const fixed = [...cells.slice(0, HEAD)];
+  for (let g = 0; g < 3; g++) fixed.push(gaps[g]?.[0] ?? "", gaps[g]?.[1] ?? "");
+  fixed.push(...cells.slice(n - TAIL));
+  return { row: toRow(fixed, RESULT_COLUMNS), repaired: true };
+}
+
 /** Columns from RESULT_COLUMNS missing in a header row. */
 export function missingResultColumns(header: string[]) {
   const have = new Set(header.map((h) => h.trim().toLowerCase()));
@@ -222,8 +277,11 @@ export async function importResearchCsv(text: string, opts: { sourceName: string
   const [header, ...data] = table;
   const missing = missingResultColumns(header);
   if (missing.length) throw new Error(`Not in the results_TEMPLATE.csv format; missing column(s): ${missing.join(", ")}`);
-  const idx = new Map(header.map((h, i) => [h.trim().toLowerCase(), i]));
-  const rows = data.map((cells) => Object.fromEntries(RESULT_COLUMNS.map((c) => [c, cells[idx.get(c)!] ?? ""])) as ResultRow);
+  const aligned = data.map((cells) => alignResultRow(cells, header));
+  const misaligned = aligned.filter((a): a is Extract<AlignedRow, { error: string }> => "error" in a);
+  const good = aligned.filter((a): a is Extract<AlignedRow, { row: ResultRow }> => "row" in a);
+  const rows = good.map((a) => a.row);
+  const repaired = good.filter((a) => a.repaired).map((a) => a.row.lead_id.trim());
 
   // ---- look up what already exists ----
   const refs = [...new Set(rows.map((r) => r.lead_id.trim()).filter((r) => r && !/^EXAMPLE/i.test(r)))];
@@ -245,7 +303,8 @@ export async function importResearchCsv(text: string, opts: { sourceName: string
 
   // ---- plan (a lead listed twice in one file only counts once) ----
   const seen = new Set<string>();
-  const plans: RowPlan[] = rows.map((r) => {
+  const plans: RowPlan[] = misaligned.map((m) => ({ kind: "reject", lead_id: m.lead_id, reason: m.error }) as RowPlan);
+  plans.push(...rows.map((r) => {
     const c = companies.get(r.lead_id.trim());
     if (c && seen.has(c.id)) return { kind: "skip", lead_id: r.lead_id.trim(), reason: "listed twice in this file" } as RowPlan;
     if (c) seen.add(c.id);
@@ -253,7 +312,7 @@ export async function importResearchCsv(text: string, opts: { sourceName: string
       company: c, contactEmails: c ? contactEmails.get(c.id) ?? new Set() : new Set(), ownerNames: c ? ownerNames.get(c.id) ?? new Set() : new Set(),
       existingReportId: c ? reports.get(c.id) : undefined, ownerMemberId: owner?.id ?? null,
     }, opts.sourceName);
-  });
+  }));
 
   // ---- apply ----
   if (!opts.dryRun) {
@@ -279,7 +338,8 @@ export async function importResearchCsv(text: string, opts: { sourceName: string
   return {
     file: opts.sourceName,
     dry_run: !!opts.dryRun,
-    rows: rows.length,
+    rows: data.length,
+    repaired: repaired.length,
     imported: ok.filter((p) => p.action === "insert").length,
     updated: ok.filter((p) => p.action === "update").length,
     skipped: plans.filter((p) => p.kind === "skip") as Extract<RowPlan, { kind: "skip" }>[],

@@ -12,4 +12,4 @@ export { verifyEmails, sendBlockers, consentForImport, isRoleAddress, isSuppress
 export { regionCode, countryCode, countryForRegion, timezoneFor } from "./geo.js";
 export { OFFERS, OFFER_KEYS, isOfferKey, recommendOffers, type Offer, type OfferKey, type OfferInput } from "./offers.js";
 export { researchReportSchema, gapSchema, reportErrors, saveResearchReport, getResearchInput, listResearchQueue, type ResearchReport } from "./research.js";
-export { RESULT_COLUMNS, planResearchRow, missingResultColumns, importResearchCsv, type ResultRow, type RowPlan, type RowContext } from "./research-import.js";
+export { RESULT_COLUMNS, alignResultRow, planResearchRow, missingResultColumns, importResearchCsv, type ResultRow, type RowPlan, type RowContext } from "./research-import.js";
