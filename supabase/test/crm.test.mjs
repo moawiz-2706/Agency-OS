@@ -53,7 +53,7 @@ before(async () => {
 
 test("an outsider sees no rows and can't write", async () => {
   await as(OUTSIDER, async () => {
-    for (const t of ["companies", "touches", "notes", "team_members", "contacts", "activities", "v_stage_counts", "v_member_time", "pipeline_summary"]) {
+    for (const t of ["companies", "touches", "notes", "team_members", "contacts", "activities", "v_stage_counts", "v_member_time", "v_lead_facets", "pipeline_summary"]) {
       assert.equal((await rows(`select * from ${t}`)).length, 0, `${t} should be empty for an outsider`);
     }
     await assert.rejects(db.query(`insert into touches (company_id, channel, outcome) values ($1, 'call', 'no_answer')`, [leadA]));

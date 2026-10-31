@@ -261,6 +261,12 @@ from touches t
 left join team_members tm on tm.id = t.member_id
 group by t.member_id, tm.full_name, (t.happened_at at time zone 'UTC')::date, t.channel, t.outcome;
 
+-- Filter options for the leads table (regions and trades with counts).
+create or replace view v_lead_facets with (security_invoker = true) as
+select region, trade, count(*)::int as leads
+from companies
+group by region, trade;
+
 -- ---------- row level security ----------
 -- Active team members read and write; only an owner deletes. The MCP server uses the
 -- service-role key and bypasses RLS. Mail accounts, jobs, settings etc. stay service-only.
@@ -301,5 +307,5 @@ grant select, insert, update, delete on team_members to authenticated;
 -- 0001's view ran as its owner, which skips RLS; make it run as the caller like the others.
 alter view pipeline_summary set (security_invoker = true);
 
-grant select on v_stage_counts, v_member_time, pipeline_summary to authenticated;
+grant select on v_stage_counts, v_member_time, v_lead_facets, pipeline_summary to authenticated;
 grant execute on function current_member_id(), is_team_member(), is_team_owner() to authenticated;
