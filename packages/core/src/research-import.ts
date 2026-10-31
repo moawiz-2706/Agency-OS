@@ -113,7 +113,10 @@ export function planResearchRow(row: ResultRow, ctx: RowContext, sourceName: str
     else dropped.push(`gap_${i} (no evidence URL)`);
   }
   if (!gaps.length && !closed && status !== "website_down") {
-    return { kind: "reject", lead_id, reason: dropped.length ? "no gap has an evidence URL" : "no gaps found" };
+    // Gaps listed without proof is bad data: reject so it gets fixed. No gaps at all means
+    // the research verified nothing (not_found / unknown): skip; there's nothing to save.
+    if (dropped.length) return { kind: "reject", lead_id, reason: "no gap has an evidence URL" };
+    return { kind: "skip", lead_id, reason: `nothing verified (status ${status}, no gaps)` };
   }
 
   const confRaw = num(row.confidence);
