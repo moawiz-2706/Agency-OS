@@ -38,6 +38,21 @@ export function money(cents: number | null | undefined, currency = "USD") {
   return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 0 }).format(cents / 100);
 }
 
+/**
+ * The dashboard's time window, fixed once per request: now, the start of the
+ * last `days`, the start of the period before it, and each day in the window (TEAM_TZ).
+ */
+export function periodWindow(days: number, at = new Date()) {
+  const now = at.getTime();
+  const daysAgo = (n: number) => new Date(now - n * 86400_000);
+  return {
+    now: at.toISOString(),
+    since: daysAgo(days).toISOString(),
+    prevSince: daysAgo(2 * days).toISOString(),
+    dayKeys: Array.from({ length: days }, (_, i) => teamDay(daysAgo(days - 1 - i))),
+  };
+}
+
 /** Calendar day of an instant in TEAM_TZ, as "YYYY-MM-DD". */
 export function teamDay(iso: string | Date) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: TEAM_TZ, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
