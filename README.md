@@ -1,4 +1,4 @@
-# AgencyOS — Lead Discovery (v0.1)
+# AgencyOS
 
 Claude (Pro, in Claude Desktop) finds home-service businesses in the USA and Canada,
 saves them to **your Supabase database**, checks their websites, and scores them for
@@ -10,6 +10,16 @@ You ──► Claude Desktop (Pro) ──► AgencyOS MCP server (this repo, run
                                      ├─► Their websites     (audit signals)
                                      └─► Supabase Postgres  (store everything)
 ```
+
+## Repo layout (pnpm workspace)
+
+| Path | What lives there |
+|---|---|
+| `packages/core` | All business logic: presets, scoring, signal detection, leads, contacts, reports |
+| `packages/adapters` | Outside services behind interfaces: `LeadSource` (Google Places), SSRF-safe web fetch |
+| `packages/db` | Supabase client and helpers |
+| `apps/mcp` | The MCP server: tool definitions only, each one calls `core` |
+| `supabase/migrations` | SQL migrations, numbered, never edited after they run |
 
 See `SPEC.md` for the full Phase 1 system design and milestones, and `docs/SPEC-v0.1.md` for the v0.1 scoring rules.
 
@@ -39,15 +49,23 @@ call makes about 1–3 requests per search phrase.
 
 ## 3. Install and build
 
-Needs Node.js 20+.
+Needs Node.js 20+ and pnpm (bundled with Node through Corepack). If `pnpm -v` fails, run once:
+
+```bash
+corepack enable pnpm
+```
+
+(On Windows without admin rights: `corepack enable pnpm --install-directory "%APPDATA%\npm"`.)
 
 ```bash
 cd agencyos
-npm install
+pnpm install
 cp .env.example .env      # Windows: copy .env.example .env   — then fill it in
-npm run build
-npm test                  # unit tests for scoring, signals, SSRF guard
+pnpm build
+pnpm test                 # unit tests for scoring, signals, place mapping, SSRF guard
 ```
+
+The `.env` file stays in the repo root, next to `pnpm-workspace.yaml`.
 
 ## 4. Connect to Claude Desktop
 
@@ -59,14 +77,14 @@ Claude Desktop → **Settings → Developer → Edit Config**. This opens `claud
   "mcpServers": {
     "agencyos": {
       "command": "node",
-      "args": ["C:\\Users\\YOU\\code\\agencyos\\dist\\index.js"]
+      "args": ["C:\\Users\\YOU\\code\\agencyos\\apps\\mcp\\dist\\index.js"]
     }
   }
 }
 ```
 
 Fully quit and reopen Claude Desktop. **agencyos** should show up in the tools/connectors menu
-with 9 tools. The server reads keys from `agencyos/.env`, so you don't need to put keys in this file.
+with 9 tools. The server reads keys from `agencyos/.env` (the repo root), so you don't need to put keys in this file.
 
 ## 5. Use it — example prompts
 
@@ -96,8 +114,8 @@ less of your Pro limit per lead.
 
 ## Troubleshooting
 
-- **Tools don't appear**: check the path in the config uses `\\` on Windows, run `npm run build`,
+- **Tools don't appear**: check the path in the config uses `\\` on Windows, run `pnpm build`,
   then restart Claude Desktop fully (quit from the tray, not just close the window).
   Logs: Settings → Developer → agencyos → *Open logs*.
-- **"Missing env var"**: `.env` must sit in the `agencyos` folder, next to `package.json`.
+- **"Missing env var"**: `.env` must sit in the repo root (the `agencyos` folder), next to `pnpm-workspace.yaml`.
 - **Google 403**: Places API (New) isn't enabled, billing is off, or the key restriction is wrong.

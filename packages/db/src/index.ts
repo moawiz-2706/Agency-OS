@@ -1,5 +1,11 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { env } from "./config.js";
+
+/** Read a required env var. The app entry point loads .env before anything calls this. */
+export function env(name: string): string {
+  const v = process.env[name];
+  if (!v) throw new Error(`Missing env var ${name}. Add it to agencyos/.env`);
+  return v;
+}
 
 let client: SupabaseClient | null = null;
 

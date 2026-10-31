@@ -1,8 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { scoreLead, statusForScore } from "../src/scoring.js";
-import { detectSignals, safeFetch } from "../src/audit.js";
-import { toPlace, normalizeDomain } from "../src/places.js";
+import { detectSignals } from "../src/signals.js";
 
 const base = { business_status: "OPERATIONAL", phone: "(214) 555-0100", website: "https://acmehvac.com", rating: 4.1, review_count: 23 };
 
@@ -31,24 +30,4 @@ test("already on GHL with booking + chat scores low", () => {
 test("closed business is disqualified", () => {
   const r = scoreLead({ ...base, business_status: "CLOSED_PERMANENTLY" });
   assert.equal(statusForScore(r), "disqualified");
-});
-
-test("place mapping + domain normalisation", () => {
-  const p = toPlace({
-    id: "abc", displayName: { text: "Acme" }, websiteUri: "https://www.AcmeHVAC.com/home",
-    addressComponents: [
-      { longText: "Dallas", shortText: "Dallas", types: ["locality"] },
-      { longText: "Texas", shortText: "TX", types: ["administrative_area_level_1"] },
-      { longText: "United States", shortText: "US", types: ["country"] },
-    ],
-  } as any);
-  assert.equal(p.city, "Dallas"); assert.equal(p.region, "TX"); assert.equal(p.country, "US");
-  assert.equal(p.website_domain, "acmehvac.com");
-  assert.equal(normalizeDomain("not a url"), null);
-});
-
-test("SSRF guard blocks private addresses", async () => {
-  for (const u of ["http://127.0.0.1/", "http://localhost/", "http://169.254.169.254/latest", "file:///etc/passwd", "http://10.0.0.5:8080/"]) {
-    await assert.rejects(safeFetch(u), `${u} should be blocked`);
-  }
 });

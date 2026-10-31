@@ -1,4 +1,4 @@
-import type { WebsiteSignals } from "./audit.js";
+import type { WebsiteSignals } from "./signals.js";
 
 /**
  * Lead score for the "Never miss a lead" home-services offer (0-100).
