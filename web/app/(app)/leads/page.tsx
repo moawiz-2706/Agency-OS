@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
 import { supabaseServer } from "@/lib/supabase/server";
 import { teamMembers } from "@/lib/team";
 import { STAGE_LABEL, STAGES, memberName } from "@/lib/crm";
+import { OFFER_KEYS, OFFER_TITLE, isOfferKey } from "@/lib/offers";
 import { LeadsTable, type LeadRow } from "@/components/leads-table";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -25,7 +26,7 @@ const SORTS: Record<string, { col: string; label: string; asc: boolean }> = {
 const ALL = "all";
 
 type Params = {
-  q?: string; stage?: string; owner?: string; region?: string; trade?: string;
+  q?: string; stage?: string; owner?: string; region?: string; trade?: string; offer?: string;
   has?: string | string[]; overdue?: string; never?: string; sort?: string; dir?: string; page?: string;
 };
 
@@ -51,6 +52,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
   const trades = [...new Set(facets.map((f) => f.trade).filter(Boolean))].sort() as string[];
 
   const stage = val(p.stage), owner = val(p.owner), region = val(p.region), trade = val(p.trade);
+  const offer = isOfferKey(p.offer) ? p.offer : undefined;
   const has = ([] as string[]).concat(p.has ?? []);
   const sortKey = SORTS[p.sort ?? ""] ? p.sort! : "score";
   const sort = SORTS[sortKey];
@@ -58,7 +60,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
   const page = Math.max(1, Number(p.page) || 1);
 
   let q = supabase.from("companies")
-    .select("id,name,trade,city,region,stage,owner_id,score,tier,email,phone,website_domain,last_touch_at,next_step,next_step_at,minutes_spent", { count: "exact" });
+    .select("id,name,trade,city,region,stage,owner_id,score,tier,email,phone,website_domain,last_touch_at,next_step,next_step_at,minutes_spent,recommended_offers", { count: "exact" });
   const term = safe(p.q ?? "");
   if (term) {
     const digits = term.replace(/\D/g, "");
@@ -77,13 +79,15 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
   if (has.includes("phone")) q = q.not("phone", "is", null);
   if (p.overdue) q = q.lt("next_step_at", new Date().toISOString());
   if (p.never) q = q.is("last_touch_at", null);
+  // Any of the lead's recommended offers (jsonb containment, GIN-indexed).
+  if (offer) q = q.filter("recommended_offers", "cs", JSON.stringify([{ key: offer }]));
   q = q.order(sort.col, { ascending: asc, nullsFirst: false }).order("name").range((page - 1) * PAGE, page * PAGE - 1);
 
   const { data, count, error } = await q;
   const rows = (data ?? []) as LeadRow[];
   const total = count ?? 0;
   const pages = Math.max(1, Math.ceil(total / PAGE));
-  const filtered = !!(term || stage || owner || region || trade || has.length || p.overdue || p.never);
+  const filtered = !!(term || stage || owner || region || trade || offer || has.length || p.overdue || p.never);
 
   const link = (over: Partial<Params>) => {
     const sp = new URLSearchParams();
@@ -127,7 +131,11 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
               <SelectItem value="asc">Ascending</SelectItem>
             </FilterSelect>
 
-            <div className="col-span-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm md:col-span-3 xl:col-span-6">
+            <FilterSelect name="offer" value={offer} placeholder="Offer">
+              <SelectItem value={ALL}>Any offer</SelectItem>
+              {OFFER_KEYS.map((k) => <SelectItem key={k} value={k}>{OFFER_TITLE[k]}</SelectItem>)}
+            </FilterSelect>
+            <div className="col-span-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm md:col-span-3 xl:col-span-5">
               {(["email", "website", "phone"] as const).map((h) => (
                 <label key={h} className="flex items-center gap-2"><Checkbox name="has" value={h} defaultChecked={has.includes(h)} />Has {h}</label>
               ))}

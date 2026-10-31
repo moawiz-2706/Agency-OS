@@ -15,6 +15,8 @@ import { TEAM_TZ, ago, dateTime, isoToTeamLocal, localNow, minutes, money } from
 import { addContact, addNote, logTouch, updateLead } from "../actions";
 import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/submit-button";
+import { ResearchReportCard, WhatToSell } from "@/components/research-cards";
+import { isOfferKey, type RecommendedOffer } from "@/lib/offers";
 import { StageBadge } from "@/components/stage-badge";
 import { MemberAvatar } from "@/components/member-avatar";
 import { Badge } from "@/components/ui/badge";
@@ -33,7 +35,12 @@ type Company = Record<string, unknown> & {
   enrichment: Record<string, string> | null; score_breakdown: { reasons?: { points?: number; reason: string }[] } | null;
 };
 type Contact = { id: string; full_name: string | null; role: string | null; email: string | null; phone: string | null;
-  consent_basis: string; email_is_role: boolean | null; do_not_contact: boolean };
+  consent_basis: string; email_is_role: boolean | null; do_not_contact: boolean; source_url: string | null };
+type Report = {
+  id: string; source: string; summary: string; recommended_offer: string | null; hook: string | null;
+  gaps: { gap: string; evidence_url: string; detail?: string }[]; discovery_questions: string[]; confidence: number | null;
+  raw: Record<string, string> | null; created_by: string | null; created_at: string; updated_at: string;
+};
 type Touch = { id: string; member_id: string | null; channel: Channel; outcome: Outcome; minutes: number; summary: string | null; happened_at: string };
 type Note = { id: string; member_id: string | null; body: string; pinned: boolean; created_at: string };
 type Activity = { id: string; member_id: string | null; actor: string; type: string; payload: Record<string, unknown>; created_at: string };
@@ -54,14 +61,16 @@ function Field({ label, children, className }: { label: string; children: React.
 export default async function LeadPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await supabaseServer();
-  const [team, companyRes, contactsRes, touchesRes, notesRes, actsRes, auditRes] = await Promise.all([
+  const [team, companyRes, contactsRes, touchesRes, notesRes, actsRes, auditRes, reportRes] = await Promise.all([
     teamMembers(),
     supabase.from("companies").select("*").eq("id", id).maybeSingle(),
-    supabase.from("contacts").select("id,full_name,role,email,phone,consent_basis,email_is_role,do_not_contact").eq("company_id", id).order("created_at"),
+    supabase.from("contacts").select("id,full_name,role,email,phone,consent_basis,email_is_role,do_not_contact,source_url").eq("company_id", id).order("created_at"),
     supabase.from("touches").select("id,member_id,channel,outcome,minutes,summary,happened_at").eq("company_id", id).order("happened_at", { ascending: false }).limit(200),
     supabase.from("notes").select("id,member_id,body,pinned,created_at").eq("company_id", id).order("created_at", { ascending: false }),
     supabase.from("activities").select("id,member_id,actor,type,payload,created_at").eq("company_id", id).order("created_at", { ascending: false }).limit(100),
     supabase.from("website_audits").select("signals,error,fetched_at").eq("company_id", id).order("fetched_at", { ascending: false }).limit(1),
+    supabase.from("research_reports").select("id,source,summary,recommended_offer,hook,gaps,discovery_questions,confidence,raw,created_by,created_at,updated_at")
+      .eq("company_id", id).order("created_at", { ascending: false }).limit(1),
   ]);
   const c = companyRes.data as Company | null;
   if (!c) notFound();
@@ -71,6 +80,8 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   const notes = (notesRes.data ?? []) as Note[];
   const acts = (actsRes.data ?? []) as Activity[];
   const audit = auditRes.data?.[0] as { signals: Record<string, unknown>; error: string | null } | undefined;
+  const report = reportRes.data?.[0] as Report | undefined;
+  const offers = ((c.recommended_offers as RecommendedOffer[] | null) ?? []).filter((o) => isOfferKey(o.key));
   const who = (mid: string | null, fallback = "System") => (mid ? memberName(team.find((m) => m.id === mid)) : fallback);
   const leadTime = c.time_zone ? localNow(c.time_zone) : null;
   const nowLocal = isoToTeamLocal(new Date().toISOString());
@@ -136,6 +147,8 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="min-w-0 space-y-6">
+          <WhatToSell offers={offers} researched={report?.recommended_offer ?? null} />
+          {report && <ResearchReportCard report={report} by={report.created_by ? who(report.created_by) : null} />}
           <Card className="border-primary/20 shadow-sm">
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><Handshake className="size-4" />Log activity</CardTitle>
@@ -337,10 +350,16 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
                   <div className="font-medium">{ct.full_name || "Unnamed"}{ct.role && <span className="font-normal text-muted-foreground"> · {ct.role}</span>}</div>
                   {ct.email && <a href={`mailto:${ct.email}`} className="block break-all text-muted-foreground hover:text-foreground hover:underline">{ct.email}</a>}
                   {ct.phone && <a href={`tel:${ct.phone}`} className="block text-muted-foreground hover:text-foreground hover:underline">{ct.phone}</a>}
+                  {ct.source_url && /^https?:/i.test(ct.source_url) && (
+                    <a href={ct.source_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:underline">
+                      <ExternalLink className="size-3" />Source
+                    </a>
+                  )}
                   <div className="flex flex-wrap gap-1">
-                    {ct.consent_basis === "unknown"
+                    {ct.role === "owner" && <Badge variant="secondary" className="font-normal">Owner</Badge>}
+                    {ct.email && (ct.consent_basis === "unknown"
                       ? <Badge variant="outline" className="border-rose-200 bg-rose-50 text-rose-700"><ShieldAlert />No consent basis · don&apos;t email</Badge>
-                      : <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700"><ShieldCheck />{ct.consent_basis.replace(/_/g, " ")}</Badge>}
+                      : <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700"><ShieldCheck />{ct.consent_basis.replace(/_/g, " ")}</Badge>)}
                     {ct.email_is_role && <Badge variant="secondary" className="font-normal">Shared inbox</Badge>}
                     {ct.do_not_contact && <Badge variant="destructive">Do not contact</Badge>}
                   </div>
