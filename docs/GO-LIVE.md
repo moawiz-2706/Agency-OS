@@ -12,14 +12,17 @@ Each one is safe to run again.
 |---|---|
 | `supabase/migrations/0001_init.sql` | already run |
 | `supabase/migrations/0002_phase1.sql` | already run |
-| `supabase/migrations/0003_crm.sql` | **run this now** |
+| `supabase/migrations/0003_crm.sql` | already run |
+| `supabase/migrations/0004_research.sql` | already run |
+| `supabase/migrations/0005_signup_approval.sql` | **run this now** |
 
 Check: **Table Editor** now shows `team_members`, `touches` and `notes`.
 
 ## 2. Supabase Auth settings
 
-1. **Authentication → Sign In / Providers → Email**: enabled. Turn **off** "Allow new users to sign up".
-   Only people created in step 3 can log in.
+1. **Authentication → Sign In / Providers**: Email enabled, and **"Allow new users to sign up" ON**.
+   Anyone may sign in, but a first-time account only sees a "Waiting for approval" screen. Migration `0005`
+   makes it a pending team member, and the database shows it no data until you approve it (see "Approving people" below).
 2. **Authentication → URL Configuration**
    - Site URL: `http://localhost:3000` for now (you'll change it in step 7)
    - Redirect URLs: add `http://localhost:3000/**`
@@ -150,6 +153,18 @@ Supabase → **Authentication → URL Configuration**:
 - Redirect URLs: keep `http://localhost:3000/**` and add `https://YOUR-APP.vercel.app/**`
 
 Sign in on the Vercel URL. You're live.
+
+## Approving people
+
+Someone new signs in with Google or an email link, and sees **"Waiting for approval"**. To let them in:
+
+1. Supabase → **Table Editor → team_members**.
+2. Find their row (their email, `active = false`).
+3. Set **active** to `true`. Optionally set `full_name`, and `role` = `owner` if they should be able to delete.
+4. They click **Check again** (or reload) and the CRM appears.
+
+To remove someone, set `active` back to `false`. They keep their login but see nothing.
+To let someone in before their first sign-in, add their row yourself with `active = true`. Their login is linked automatically when they first sign in.
 
 ## Day to day
 
