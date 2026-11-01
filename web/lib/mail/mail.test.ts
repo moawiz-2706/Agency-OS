@@ -87,3 +87,36 @@ test("send times are read in the lead's own time zone", () => {
   // Daylight saving: 31 Oct 2026 is still MDT (UTC-6).
   assert.equal(zonedLocalToIso("2026-10-31T07:45", "America/Denver"), "2026-10-31T13:45:00.000Z");
 });
+
+test("GoDaddy (IMAP) messages: replies join our thread, bounces find the failed email", async () => {
+  const { imapToSync } = await import("./imap-parse.ts");
+  const { buildMime, imapThreadId } = await import("./message.ts");
+  const ours = buildMime({ from_email: "moawiz@sentinel.test", from_name: "Moawiz", to: "darin@swift.test", subject: "Two numbers",
+    body: "Hi Darin", signature: "Moawiz\nAddress", message_id: "<a1@sentinel.test>", date: new Date("2026-11-04T14:45:00Z") });
+  assert.match(ours, /\r\nDate: Wed, 04 Nov 2026 14:45:00 \+0000\r\nMessage-ID: <a1@sentinel\.test>\r\n/);
+  assert.equal(imapThreadId("<a2@x>", "<a1@sentinel.test>", "<a1@sentinel.test> <a2@x>"), "rfc:<a1@sentinel.test>");
+
+  const sent = await imapToSync(ours, { id: "rfc:<a1@sentinel.test>", mailbox: "moawiz@sentinel.test", inSentFolder: true });
+  assert.deepEqual([sent.kind, sent.thread_id, sent.to], ["sent", "rfc:<a1@sentinel.test>", ["darin@swift.test"]]);
+
+  const reply = [
+    "From: Darin <darin@swift.test>", "To: moawiz@sentinel.test", "Subject: Re: Two numbers",
+    "Message-ID: <r1@swift.test>", "In-Reply-To: <a1@sentinel.test>", "References: <a1@sentinel.test>",
+    "Date: Thu, 05 Nov 2026 15:00:00 +0000", "Content-Type: text/plain; charset=utf-8", "",
+    "Sounds good, call me.", "", "On Wed, Nov 4, 2026 Moawiz wrote:", "> Hi Darin", "",
+  ].join("\r\n");
+  const r = await imapToSync(reply, { id: "rfc:<r1@swift.test>", mailbox: "moawiz@sentinel.test", inSentFolder: false });
+  assert.deepEqual([r.kind, r.thread_id, r.body, r.rfc_id, r.date], ["reply", "rfc:<a1@sentinel.test>", "Sounds good, call me.", "<r1@swift.test>", "2026-11-05T15:00:00.000Z"]);
+
+  const bounce = [
+    "From: Mail Delivery System <MAILER-DAEMON@secureserver.net>", "To: moawiz@sentinel.test", "Subject: Undelivered Mail Returned to Sender",
+    "Message-ID: <b1@secureserver.net>", "MIME-Version: 1.0", 'Content-Type: multipart/report; report-type=delivery-status; boundary="XX"', "",
+    "--XX", "Content-Type: text/plain", "", "Your message could not be delivered.", "",
+    "--XX", "Content-Type: message/delivery-status", "", "Reporting-MTA: dns; p3plibsmtp.secureserver.net", "",
+    "Final-Recipient: rfc822; old@swift.test", "Action: failed", "Status: 5.1.1", "",
+    "--XX", "Content-Type: text/rfc822-headers", "", "From: moawiz@sentinel.test", "To: old@swift.test", "Subject: Hello",
+    "Message-ID: <a9@sentinel.test>", "", "--XX--", "",
+  ].join("\r\n");
+  const b = await imapToSync(bounce, { id: "rfc:<b1@secureserver.net>", mailbox: "moawiz@sentinel.test", inSentFolder: false });
+  assert.deepEqual([b.kind, b.bounced_to, b.thread_id], ["bounce", "old@swift.test", "rfc:<a9@sentinel.test>"]);
+});

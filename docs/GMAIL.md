@@ -1,6 +1,7 @@
-# Gmail: send from the CRM, sync replies back
+# Email: send from the CRM, sync replies back
 
-Each team member connects their own Gmail. Emails written on a lead go out from that
+Each team member connects their own inboxes: Gmail, and GoDaddy (or any IMAP/SMTP) email
+such as moawiz@thesentinelsystems.com. Emails written on a lead go out from that
 person's inbox at the time they choose, in the lead's time zone. Every 5 minutes AgencyOS
 syncs back into the CRM:
 
@@ -10,7 +11,8 @@ syncs back into the CRM:
 - bounces, which mark the address bad and stop its follow-ups;
 - out-of-office replies, which are recorded but don't stop anything.
 
-About 20 minutes of setup. You do steps 1–5 once; each team member does step 6.
+About 20 minutes of setup. You do steps 1–5 once; each team member does step 6 (Gmail)
+and/or step 7 (GoDaddy). GoDaddy-only? Skip step 1 and the two `GOOGLE_*` variables.
 
 ## 1. Google Cloud: a Gmail app
 
@@ -65,8 +67,8 @@ Don't change `MAIL_TOKEN_KEY` later: every connected inbox would then need recon
 
 ## 3. Database
 
-Supabase → **SQL Editor → New query**: paste `supabase/migrations/0006_mail.sql` → **Run**.
-Then, in a new query, store the worker secret (the database keeps only its SHA-256 hash):
+Supabase → **SQL Editor → New query**: paste `supabase/migrations/0006_mail.sql` → **Run**,
+then the same with `supabase/migrations/0007_mail_inboxes.sql`. Then, in a new query, store the worker secret (the database keeps only its SHA-256 hash):
 
 ```sql
 select mailer_set_secret('PASTE-MAILER_SECRET-HERE');
@@ -91,19 +93,49 @@ To stop it: `select cron.unschedule('agencyos-mail');`.
 
 ## 5. Turn sending on (owner)
 
-AgencyOS → **Account → Gmail → Turn sending on**. Until then nothing is sent, but syncing works.
+AgencyOS → **Account → Email inboxes → Turn sending on**. Until then nothing is sent, but syncing works.
 This is the kill switch: turning it off stops every send at once.
 
 ## 6. Each person: connect Gmail
 
-1. **Account → Connect Gmail** → pick your Gmail → allow **both** permissions.
-2. Fill in **Signature**: your name, agency, phone and **a real postal address**. The law
-   requires the address in every email. The opt-out line ("Not interested? Reply "no"…")
-   is added automatically.
+1. **Account → Email inboxes → Add Gmail inbox** → pick your Gmail → allow **both** permissions.
+2. Open **Name, signature and daily limit** and fill in the **Signature**: your name, agency,
+   phone and **a real postal address**. The law requires the address in every email. The
+   opt-out line ("Not interested? Reply "no"…") is added automatically.
 3. Set **Max emails / day**: 20 to start, at most 40.
 
 The first sync looks back 14 days, so emails you sent by hand before connecting, and any
 replies to them, show up on the right leads.
+
+## 7. Each person: connect GoDaddy email
+
+GoDaddy Professional Email has no Google-style sign-in, so AgencyOS logs in with the
+mailbox password (IMAP to read, SMTP to send), the way Outlook or a phone mail app does.
+
+1. GoDaddy → **My Products → Email** → set up the mailbox and give it a strong password
+   used nowhere else. Log in once at **email.godaddy.com** to check it works.
+2. AgencyOS → **Account → Email inboxes → Add GoDaddy email** → enter the address and password →
+   **Test and connect**. The server settings are already filled in for GoDaddy
+   (`imap.secureserver.net:993`, `smtpout.secureserver.net:465`). AgencyOS logs in to check
+   both before saving anything.
+3. Fill in its **Signature** and **Max emails / day** (warming up: start at 5–10).
+4. If you have more than one inbox, **Make default** the one new leads should come from.
+
+If you change the mailbox password at GoDaddy, the inbox shows **Needs reconnecting**: add it
+again with the new password. Every email you send from AgencyOS is also filed in the inbox's
+**Sent** folder, so webmail shows the full conversation.
+
+**Several inboxes:** each email can pick its inbox (**From** on the lead page). Left on
+*Automatic*, a follow-up goes from the inbox that last emailed that person, so it stays in
+the same thread, and anything else goes from your default. Example: the GHL leads emailed
+from your personal Gmail keep getting their follow-ups from Gmail, while new leads go from
+moawiz@thesentinelsystems.com.
+
+**Before cold email from a new domain**, check its DNS at GoDaddy → **Domain → DNS**:
+MX `mailstore1.secureserver.net` / `smtp.secureserver.net`, TXT `v=spf1 include:secureserver.net -all`,
+and add TXT `_dmarc` = `v=DMARC1; p=none; rua=mailto:you@yourdomain.com`. Send a test to
+mail-tester.com (aim for 9/10; if DKIM fails, ask GoDaddy support to enable DKIM for
+Professional Email), and warm the inbox up for 2–3 weeks before cold outreach.
 
 ## Writing and sending
 
@@ -131,11 +163,14 @@ Drop `--dry-run` to save. Then open each lead, check the emails, and click **App
 
 ## What's protected, and how
 
-- **Tokens:** Gmail tokens are encrypted with AES-256-GCM on the server and bound to their
+- **Passwords and tokens:** GoDaddy mailbox passwords and Gmail tokens are encrypted with AES-256-GCM on the server and bound to their
   mailbox address. The key is never in the database or the browser, and the database
   table holding the tokens can't be read through the API at all.
-- **Permissions:** AgencyOS can send and read mail only. It can't delete or change anything,
-  and only messages to and from your leads are stored.
+- **Permissions:** Gmail access is limited to sending and reading; it can't delete or change
+  anything. A GoDaddy password can technically do everything in that mailbox, which is why it
+  is encrypted, only decrypted in memory on the server for each run, and never sent back to the
+  browser. AgencyOS itself only reads, sends, and files a copy of what it sends in Sent. Only
+  messages to and from your leads are stored.
 - **No master key on Vercel:** the worker uses the public anon key plus `MAILER_SECRET`,
   which only opens the mail functions. Team members write emails through functions that
   check who they are, so nobody can send from someone else's inbox.

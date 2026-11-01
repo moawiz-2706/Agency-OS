@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 
 export type OutreachMessage = {
-  id: string; contact_id: string; member_id: string | null; step: number; status: string; source: string;
+  id: string; contact_id: string; member_id: string | null; mail_account_id: string | null; step: number; status: string; source: string;
   subject: string; body: string; scheduled_for: string | null; sent_at: string | null; error: string | null; created_at: string;
 };
 export type InboundMessage = {
@@ -23,9 +23,10 @@ export type InboundMessage = {
   received_at: string | null; classification: string | null; handled: boolean;
 };
 export type MyMailAccount = {
-  email: string; daily_limit: number; connected: boolean; needs_reconnect: boolean; last_error: string | null;
-  sent_24h: number; sending_enabled: boolean; signature: string | null;
-} | null;
+  id: string; email: string; daily_limit: number; is_default: boolean; connected: boolean; needs_reconnect: boolean;
+  last_error: string | null; sent_24h: number; sending_enabled: boolean; signature: string | null;
+};
+export type TeamInbox = { id: string; email: string; member_id: string };
 type EmailContact = { id: string; full_name: string | null; email: string | null; do_not_contact: boolean; consent_basis: string };
 
 const STATUS: Record<string, { label: string; className: string }> = {
@@ -65,11 +66,14 @@ function Field({ label, children, className }: { label: string; children: React.
   return <div className={className}><Label className="mb-1.5 text-xs text-muted-foreground">{label}</Label>{children}</div>;
 }
 
-export function EmailPanel({ companyId, tz, contacts, messages, replies, account, meId, team }: {
+export function EmailPanel({ companyId, tz, contacts, messages, replies, accounts, inboxes, meId, team }: {
   companyId: string; tz: string; contacts: EmailContact[]; messages: OutreachMessage[]; replies: InboundMessage[];
-  account: MyMailAccount; meId: string | null; team: Member[];
+  accounts: MyMailAccount[]; inboxes: TeamInbox[]; meId: string | null; team: Member[];
 }) {
   const who = (id: string | null) => (id ? memberName(team.find((m) => m.id === id)) : "Someone");
+  const inboxOf = (id: string | null) => inboxes.find((i) => i.id === id)?.email ?? null;
+  const usable = accounts.filter((a) => a.connected && !a.needs_reconnect);
+  const def = usable.find((a) => a.is_default) ?? usable[0] ?? null;
   const contactName = (id: string | null) => {
     const ct = contacts.find((x) => x.id === id);
     return ct ? ct.full_name || ct.email || "contact" : "contact";
@@ -85,10 +89,13 @@ export function EmailPanel({ companyId, tz, contacts, messages, replies, account
     ...replies.map((r) => ({ at: r.received_at ?? "", key: `i${r.id}`, m: null, r })),
   ].sort((a, b) => a.at.localeCompare(b.at));
 
-  const warning = !account ? <>Connect your Gmail on the <Link href="/account" className="underline">Account page</Link> to send from here.</>
-    : account.needs_reconnect || !account.connected ? <>Your Gmail needs reconnecting on the <Link href="/account" className="underline">Account page</Link>.</>
-    : !account.signature ? <>Add your signature (with your postal address) on the <Link href="/account" className="underline">Account page</Link> before sending.</>
-    : !account.sending_enabled ? <>Sending is switched off for the team (an owner turns it on in Account). Emails wait until then.</>
+  const account = (link: string) => <Link href="/account" className="underline">{link}</Link>;
+  const broken = accounts.find((a) => a.needs_reconnect);
+  const unsigned = usable.find((a) => !a.signature);
+  const warning = !usable.length ? <>Connect an inbox (Gmail or GoDaddy) on the {account("Account page")} to send from here.</>
+    : broken ? <>{broken.email} needs reconnecting on the {account("Account page")}.</>
+    : unsigned ? <>Add a signature (with your postal address) to {unsigned.email} on the {account("Account page")}: it can&apos;t send until then.</>
+    : !usable[0].sending_enabled ? <>Sending is switched off for the team (an owner turns it on in Account). Emails wait until then.</>
     : null;
 
   return (
@@ -96,8 +103,8 @@ export function EmailPanel({ companyId, tz, contacts, messages, replies, account
       <CardHeader>
         <CardTitle className="flex items-center gap-2"><Mail className="size-4" />Email</CardTitle>
         <CardDescription>
-          {account?.connected ? <>Sending as <b>{account.email}</b> · {account.sent_24h}/{account.daily_limit} in the last 24h · times shown in their time zone ({tz}) and yours</>
-            : "Emails go out from your own Gmail, and replies sync back here."}
+          {def ? <>Your default inbox is <b>{def.email}</b> ({def.sent_24h}/{def.daily_limit} in the last 24h) · times shown in their time zone ({tz}) and yours</>
+            : "Emails go out from your own inbox, and replies sync back here."}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -115,7 +122,10 @@ export function EmailPanel({ companyId, tz, contacts, messages, replies, account
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="outline" className={STATUS[m.status]?.className}>{STATUS[m.status]?.label ?? m.status}</Badge>
                   <span className="font-medium">Email {m.step}</span>
-                  <span className="text-muted-foreground">to {contactName(m.contact_id)} · by {who(m.member_id)}{m.source === "gmail" ? " (sent from Gmail)" : ""}</span>
+                  <span className="text-muted-foreground">
+                    to {contactName(m.contact_id)} · by {who(m.member_id)}
+                    {inboxOf(m.mail_account_id) ? ` from ${inboxOf(m.mail_account_id)}` : ""}{m.source === "gmail" ? " (sent from the inbox itself)" : ""}
+                  </span>
                 </div>
                 <div className="mt-1 text-xs text-muted-foreground">
                   {m.sent_at ? <>Sent {when(m.sent_at, tz)} their time · {when(m.sent_at, TEAM_TZ)} yours · {ago(m.sent_at)}</>
@@ -185,6 +195,17 @@ export function EmailPanel({ companyId, tz, contacts, messages, replies, account
                   <SelectContent>{emailable.map((ct) => <SelectItem key={ct.id} value={ct.id}>{ct.full_name ? `${ct.full_name} · ${ct.email}` : ct.email}</SelectItem>)}</SelectContent>
                 </Select>
               </Field>
+              {usable.length > 1 && (
+                <Field label="From" className="sm:col-span-2">
+                  <Select name="from_account" defaultValue="auto">
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">Automatic: the inbox that last emailed them, else {def?.email}</SelectItem>
+                      {usable.map((a) => <SelectItem key={a.id} value={a.id}>{a.email}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </Field>
+              )}
               <Field label={`Send at (their time, ${tz})`}>
                 <Input name="send_at" type="datetime-local" defaultValue={nextMorning(tz)} />
               </Field>

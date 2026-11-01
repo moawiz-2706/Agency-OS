@@ -1,4 +1,4 @@
-// Migration 0006: connect an inbox, queue/approve emails, the worker's claim/result
+// Migrations 0006 + 0007: connect an inbox, queue/approve emails, the worker's claim/result
 // cycle, and Gmail sync (manual sends, replies, opt-outs, bounces, out-of-office).
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
@@ -21,7 +21,7 @@ const backdateLastSend = () => db.query(`update mail_accounts set last_sent_at =
 
 before(async () => {
   ({ db, as, rows } = await createDb());
-  await db.exec(migrationSql("0006_mail.sql"));   // safe to re-run
+  await db.exec(migrationSql("0007_mail_inboxes.sql"));   // safe to re-run
   await db.query(`insert into team_members (user_id, email, full_name, role) values ($1, $2, 'Owner', 'owner'), ($3, $4, 'Partner', 'partner')`,
     [OWNER.sub, OWNER.email, PARTNER.sub, PARTNER.email]);
   ownerId = (await one(`select id from team_members where role = 'owner'`)).id;
@@ -41,13 +41,15 @@ test("the worker functions refuse a wrong secret, and nobody reads mail_accounts
 test("a member connects their inbox and sets the signature; the token stays hidden", async () => {
   await as(OWNER, async () => {
     await db.query(`select save_my_mail_account('Owner@Gmail.test', 'Moawiz', $1)`, [TOKEN]);
-    await assert.rejects(db.query(`select save_my_mail_settings('Moawiz', 'too short', 20)`), /postal address/);
-    await db.query(`select save_my_mail_settings('Moawiz', 'Moawiz · Agency · 123 Main St, Austin TX', 99)`);
-    const me = await one(`select * from my_mail_account()`);
+    const { id } = await one(`select id from my_mail_accounts()`);
+    await assert.rejects(db.query(`select save_my_mail_settings($1, 'Moawiz', 'too short', 20)`, [id]), /postal address/);
+    await db.query(`select save_my_mail_settings($1, 'Moawiz', 'Moawiz · Agency · 123 Main St, Austin TX', 99)`, [id]);
+    const me = await one(`select * from my_mail_accounts()`);
     assert.equal(me.email, "owner@gmail.test");
     assert.equal(me.connected, true);
     assert.equal(me.daily_limit, 40);        // capped
     assert.equal(me.sending_enabled, false); // kill switch starts off
+    assert.equal(me.is_default, true);       // first inbox is the default
     assert.equal("token" in me, false);
   });
   await as(PARTNER, async () => {
