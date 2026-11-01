@@ -21,10 +21,11 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
   const { reset, mail, reason } = await searchParams;
   const { member } = await currentMember();
   const supabase = await supabaseServer();
-  const [{ data: { user } }, mailRes, sendingRes, checks, bookingRes] = await Promise.all([
+  const [{ data: { user } }, mailRes, sendingRes, pauseRes, checks, bookingRes] = await Promise.all([
     supabase.auth.getUser(),
     supabase.rpc("my_mail_accounts"),
     supabase.rpc("sending_enabled"),
+    supabase.rpc("sending_pause_info"),   // missing until migration 0008 runs: then just no note
     mailSetupCheck(await headers()),
     supabase.rpc("booking_url"),   // missing until migration 0012 runs
   ]);
@@ -36,7 +37,8 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
       <PageHeader title="Account" description={`${memberName(member)} · ${user?.email ?? ""}`} />
 
       <div className="grid max-w-3xl gap-6">
-        <MailAccountCard accounts={mailAccounts} sendingEnabled={sendingRes.data === true} isOwner={member?.role === "owner"}
+        <MailAccountCard accounts={mailAccounts} sendingEnabled={sendingRes.data === true}
+          pausedReason={(pauseRes.data as { reason?: string } | null)?.reason ?? null} isOwner={member?.role === "owner"}
           status={mail} reason={reason} fallbackName={memberName(member)} checks={checks} />
 
         <Card>

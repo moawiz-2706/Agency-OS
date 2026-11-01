@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Globe, Loader2, Mail, Phone } from "lucide-react";
 import { bulkUpdate } from "@/app/(app)/leads/actions";
+import { enrollCompanies } from "@/app/(app)/sequences/actions";
 import { STAGE_LABEL, STAGES, memberName, type Member, type Stage } from "@/lib/crm";
 import { ago, minutes } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -27,7 +28,7 @@ export type LeadRow = {
 
 const TIER_DOT: Record<string, string> = { high: "bg-emerald-500", medium: "bg-amber-500", low: "bg-zinc-300" };
 
-export function LeadsTable({ rows, team }: { rows: LeadRow[]; team: Member[] }) {
+export function LeadsTable({ rows, team, sequences = [] }: { rows: LeadRow[]; team: Member[]; sequences?: { id: string; name: string }[] }) {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [action, setAction] = useState("");
   const [pending, start] = useTransition();
@@ -39,9 +40,9 @@ export function LeadsTable({ rows, team }: { rows: LeadRow[]; team: Member[] }) 
     const f = new FormData();
     picked.forEach((id) => f.append("ids", id));
     f.set("bulk_action", action);
-    const res = await bulkUpdate(f);
+    const res = action.startsWith("sequence:") ? await enrollCompanies(action.slice(9), [...picked]) : await bulkUpdate(f);
     if (res.ok) {
-      toast.success(`Updated ${picked.size} ${picked.size === 1 ? "lead" : "leads"}`);
+      toast.success(res.message ?? `Updated ${picked.size} ${picked.size === 1 ? "lead" : "leads"}`, { duration: 10000 });
       setPicked(new Set());
       setAction("");
     } else toast.error(res.error);
@@ -64,6 +65,13 @@ export function LeadsTable({ rows, team }: { rows: LeadRow[]; team: Member[] }) 
               <SelectLabel>Move to stage</SelectLabel>
               {STAGES.map((s) => <SelectItem key={s} value={`stage:${s}`}>{STAGE_LABEL[s]}</SelectItem>)}
             </SelectGroup>
+            {sequences.length > 0 && <>
+              <SelectSeparator />
+              <SelectGroup>
+                <SelectLabel>Add to sequence</SelectLabel>
+                {sequences.map((q) => <SelectItem key={q.id} value={`sequence:${q.id}`}>{q.name}</SelectItem>)}
+              </SelectGroup>
+            </>}
           </SelectContent>
         </Select>
         <Button size="sm" onClick={apply} disabled={!picked.size || !action || pending}>

@@ -134,7 +134,43 @@ export async function syncImap(c: ImapFlow, s: ImapSettings, since: Date,
 export type ImapClaim = {
   to: string; to_name: string | null; subject: string; body: string; thread_id: string | null;
   in_reply_to: string | null; references: string | null; from_email: string; from_name: string | null; signature: string;
+  unsubscribe_url?: string | null;
 };
+
+export type DirectMail = {
+  from_name: string | null; to: string[]; cc: string[]; bcc: string[]; subject: string; text: string;
+  in_reply_to: string | null; references: string | null;
+  attachments: { filename: string; content: Buffer; contentType: string }[];
+};
+
+/** An email written by hand in the Mailbox: plain text plus attachments, filed in Sent like webmail does. */
+export async function sendDirect(s: ImapSettings, m: DirectMail) {
+  const messageId = `<${randomUUID()}@${s.email.split("@")[1]}>`;
+  const built = await nodemailer.createTransport({ streamTransport: true, buffer: true, newline: "windows" }).sendMail({
+    from: { name: m.from_name ?? "", address: s.email }, to: m.to, cc: m.cc,
+    subject: m.subject.replace(/[\r\n]+/g, " ").trim(), text: m.text, messageId, date: new Date(),
+    inReplyTo: m.in_reply_to ?? undefined, references: m.references ?? undefined,
+    attachments: m.attachments.map((a) => ({ filename: a.filename, content: a.content, contentType: a.contentType })),
+  });
+  // Bcc goes only in the SMTP envelope: a stream-built message would otherwise carry the Bcc header.
+  const raw = built.message as Buffer;
+  try {
+    await smtpTransport(s).sendMail({ envelope: { from: s.email, to: [...m.to, ...m.cc, ...m.bcc] }, raw });
+  } catch (e) {
+    if (isAuthFailure(e)) throw new MailAuthError(`${s.email}: the mail server refused to send with this password. Reconnect it.`);
+    throw e;
+  }
+  const c = await openImap(s).catch(() => null);
+  if (c) {
+    try {
+      const folder = await sentFolder(c).catch(() => null);
+      if (folder) await c.append(folder, raw, ["\\Seen"]).catch(() => {});
+    } finally {
+      await c.logout().catch(() => {});
+    }
+  }
+  return messageId;
+}
 
 /** Send over SMTP, then file a copy in Sent like a normal mail app would (SMTP alone doesn't). */
 export async function sendImap(c: ImapFlow | null, s: ImapSettings, claim: ImapClaim) {
@@ -142,7 +178,7 @@ export async function sendImap(c: ImapFlow | null, s: ImapSettings, claim: ImapC
   const mime = buildMime({
     from_email: claim.from_email, from_name: claim.from_name, to: claim.to, to_name: claim.to_name, subject: claim.subject,
     body: claim.body, signature: claim.signature, in_reply_to: claim.in_reply_to, references: claim.references,
-    message_id: messageId, date: new Date(),
+    message_id: messageId, date: new Date(), unsubscribe_url: claim.unsubscribe_url,
   });
   try {
     await smtpTransport(s).sendMail({ envelope: { from: s.email, to: [claim.to] }, raw: mime });

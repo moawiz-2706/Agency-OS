@@ -61,8 +61,8 @@ function Inbox({ a, fallbackName }: { a: MailAccountRow; fallbackName: string })
   );
 }
 
-export function MailAccountCard({ accounts, sendingEnabled, isOwner, status, reason, fallbackName, checks }: {
-  accounts: MailAccountRow[]; sendingEnabled: boolean; isOwner: boolean; status?: string; reason?: string; fallbackName: string;
+export function MailAccountCard({ accounts, sendingEnabled, pausedReason, isOwner, status, reason, fallbackName, checks }: {
+  accounts: MailAccountRow[]; sendingEnabled: boolean; pausedReason: string | null; isOwner: boolean; status?: string; reason?: string; fallbackName: string;
   checks: SetupCheck[];
 }) {
   const failing = checks.filter((c) => !c.ok).length;
@@ -147,6 +147,9 @@ export function MailAccountCard({ accounts, sendingEnabled, isOwner, status, rea
             <div className="text-xs text-muted-foreground">
               {sendingEnabled ? "Approved emails go out at their scheduled time." : "Nothing is sent until an owner turns this on. Syncing still works."}
             </div>
+            {!sendingEnabled && pausedReason && (
+              <div className="mt-1.5 text-xs font-medium text-red-600 dark:text-red-400">Switched off automatically: {pausedReason}</div>
+            )}
           </div>
           {isOwner && (
             <ActionForm action={setSendingEnabled.bind(null, !sendingEnabled)}>

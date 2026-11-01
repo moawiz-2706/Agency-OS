@@ -361,7 +361,16 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
               {contacts.map((ct) => (
                 <div key={ct.id} className="space-y-1.5 rounded-lg border p-3 text-sm">
                   <div className="font-medium">{ct.full_name || "Unnamed"}{ct.role && <span className="font-normal text-muted-foreground"> · {ct.role}</span>}</div>
-                  {ct.email && <a href={`mailto:${ct.email}`} className="block break-all text-muted-foreground hover:text-foreground hover:underline">{ct.email}</a>}
+                  {ct.email && (
+                    <div className="flex items-center gap-2">
+                      <span className="min-w-0 flex-1 break-all text-muted-foreground">{ct.email}</span>
+                      {!ct.do_not_contact && (
+                        <Link href={`/mailbox?${new URLSearchParams({ compose: "new", to: ct.email })}`} className="shrink-0 text-xs font-medium text-primary hover:underline">
+                          Write now
+                        </Link>
+                      )}
+                    </div>
+                  )}
                   {ct.phone && <a href={`tel:${ct.phone}`} className="block text-muted-foreground hover:text-foreground hover:underline">{ct.phone}</a>}
                   {ct.source_url && /^https?:/i.test(ct.source_url) && (
                     <a href={ct.source_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:underline">

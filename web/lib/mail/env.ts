@@ -24,4 +24,7 @@ export function appOrigin(h: Headers): string {
   return `${proto.split(",")[0]}://${host.split(",")[0]}`;
 }
 
+/** The app's address for links inside emails (no request to read it from in the worker). */
+export const publicOrigin = () => (envValue("APP_URL") ?? "https://agencyos.thesentinelsystems.com").replace(/\/+$/, "");
+
 export const gmailRedirectUri = (h: Headers) => `${appOrigin(h)}/auth/gmail/callback`;
