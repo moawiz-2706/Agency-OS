@@ -4,7 +4,6 @@ import { cn } from "@/lib/utils";
 export const BRAND = "The Sentinel Systems";
 export const BRAND_SHORT = "Sentinel";
 export const CONTACT_EMAIL = "moawiz@thesentinelsystems.com";
-export const AUDIT_MAILTO = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent("Free audit request")}`;
 
 /** The shield mark: a sentinel's shield with a check, in the brand colour. */
 export function BrandMark({ className }: { className?: string }) {

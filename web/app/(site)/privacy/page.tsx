@@ -8,8 +8,8 @@ export default function Privacy() {
   return (
     <LegalPage title="Privacy policy" updated="1 November 2026">
       <p>
-        This policy explains how {BRAND} (&ldquo;we&rdquo;, &ldquo;us&rdquo;) collects and uses information through our website,
-        thesentinelsystems.com, our internal workspace, and when we contact businesses about our services.
+        This policy explains how {BRAND} (&ldquo;we&rdquo;, &ldquo;us&rdquo;) collects and uses information in our staff workspace at
+        agencyos.thesentinelsystems.com, and when we contact businesses about our services.
       </p>
 
       <h2>Information we collect</h2>
@@ -17,7 +17,7 @@ export default function Privacy() {
         <li><b>Business contact information</b> that businesses publish themselves (for example on their own website or business listings): business name, phone number, business email address, website and service area.</li>
         <li><b>Information you send us</b> when you email or call us, such as your name, email address, phone number and the content of your message.</li>
         <li><b>Team account information</b> for our own staff who sign in to our workspace: name, email address and sign-in details.</li>
-        <li><b>Basic technical information</b> needed to run the website securely, such as browser type and pages requested, kept in standard server logs.</li>
+        <li><b>Basic technical information</b> needed to run the workspace securely, such as browser type and pages requested, kept in standard server logs.</li>
       </ul>
 
       <h2>How we use it</h2>

@@ -8,13 +8,7 @@ export const metadata: Metadata = { title: "Terms of service", alternates: { can
 export default function Terms() {
   return (
     <LegalPage title="Terms of service" updated="1 November 2026">
-      <p>These terms apply to thesentinelsystems.com and to the workspace {BRAND} provides to its own team.</p>
-
-      <h2>The website</h2>
-      <p>
-        The website describes our services. Information on it is general and may change. Any work we do for a client is covered by a separate
-        written agreement or proposal, which takes priority over this page.
-      </p>
+      <p>These terms apply to the staff workspace at agencyos.thesentinelsystems.com, which {BRAND} provides to its own team.</p>
 
       <h2>The team workspace</h2>
       <ul>
@@ -32,8 +26,8 @@ export default function Terms() {
 
       <h2>No warranty and limitation of liability</h2>
       <p>
-        The website and workspace are provided &ldquo;as is&rdquo;. To the extent the law allows, {BRAND} isn&apos;t liable for indirect or
-        consequential losses arising from their use.
+        The workspace is provided &ldquo;as is&rdquo;. To the extent the law allows, {BRAND} isn&apos;t liable for indirect or
+        consequential losses arising from its use.
       </p>
 
       <h2>Privacy</h2>
