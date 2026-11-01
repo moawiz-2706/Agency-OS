@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { CheckSquare, Inbox, KanbanSquare, LayoutDashboard, ListOrdered, LogOut, Mail, Menu, UserCog, Users } from "lucide-react";
+import { BarChart3, CheckSquare, Inbox, KanbanSquare, LayoutDashboard, ListOrdered, LogOut, Mail, Menu, UserCog, Users } from "lucide-react";
 import { Brand as BrandLink } from "@/components/brand";
 import { ThemeToggle } from "@/components/theme";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ const NAV = [
   { href: "/tasks", label: "Tasks", icon: CheckSquare },
   { href: "/inbox", label: "Inbox", icon: Inbox },
   { href: "/mailbox", label: "Mailbox", icon: Mail },
+  { href: "/reports", label: "Reports", icon: BarChart3 },
 ];
 
 type Me = { name: string; email: string; initials: string; color: string; role: string };
