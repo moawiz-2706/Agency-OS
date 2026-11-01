@@ -160,9 +160,10 @@ export function ComposeForm({ inboxes, inboxId, mode, src, defaults, quoted, has
 }
 
 /** Reply / forward links and the server-side actions on one message. */
-export function MessageActions({ inboxId, folder, uid, flagged, href, back }: {
+export function MessageActions({ inboxId, folder, uid, flagged, links, back }: {
   inboxId: string; folder: Folder; uid: number; flagged: boolean;
-  href: (compose: ComposeMode) => string; back: string;
+  /** Plain links, not a function: a server page can only hand data to this client component. */
+  links: Record<Exclude<ComposeMode, "new">, string>; back: string;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -177,9 +178,9 @@ export function MessageActions({ inboxId, folder, uid, flagged, href, back }: {
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <Button size="sm" onClick={() => router.push(href("reply"))}><Reply />Reply</Button>
-      <Button size="sm" variant="outline" onClick={() => router.push(href("replyall"))}><ReplyAll />Reply all</Button>
-      <Button size="sm" variant="outline" onClick={() => router.push(href("forward"))}><Forward />Forward</Button>
+      <Button size="sm" onClick={() => router.push(links.reply)}><Reply />Reply</Button>
+      <Button size="sm" variant="outline" onClick={() => router.push(links.replyall)}><ReplyAll />Reply all</Button>
+      <Button size="sm" variant="outline" onClick={() => router.push(links.forward)}><Forward />Forward</Button>
       <span className="mx-1 h-5 w-px bg-border" />
       <Button size="icon" variant="ghost" disabled={pending} title={flagged ? "Remove star" : "Star"} aria-label={flagged ? "Remove star" : "Star"} onClick={() => flag(flagged ? "unstar" : "star")}>
         <Star className={flagged ? "fill-amber-400 text-amber-400" : ""} />
