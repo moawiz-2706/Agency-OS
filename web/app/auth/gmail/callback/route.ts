@@ -6,6 +6,7 @@ import { memberName } from "@/lib/crm";
 import { STATE_COOKIE, exchangeCode, revokeToken } from "@/lib/mail/google";
 import { encryptToken } from "@/lib/mail/crypto";
 import { runMail } from "@/lib/mail/worker";
+import { gmailRedirectUri } from "@/lib/mail/env";
 
 export const maxDuration = 60;
 
@@ -33,7 +34,7 @@ export async function GET(request: NextRequest) {
 
   let refreshToken: string | undefined;
   try {
-    const got = await exchangeCode(params.get("code") ?? "", `${request.nextUrl.origin}/auth/gmail/callback`);
+    const got = await exchangeCode(params.get("code") ?? "", gmailRedirectUri(request.headers));
     refreshToken = got.refreshToken;
     const supabase = await supabaseServer();
     const { error } = await supabase.rpc("save_my_mail_account", {

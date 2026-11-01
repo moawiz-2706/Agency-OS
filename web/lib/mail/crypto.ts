@@ -7,7 +7,9 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 const b64u = (b: Buffer) => b.toString("base64url");
 
 export function tokenKey(raw = process.env.MAIL_TOKEN_KEY): Buffer {
-  const key = Buffer.from(raw ?? "", "base64");
+  // Tolerate the whole "MAIL_TOKEN_KEY=..." line or quotes being pasted as the value.
+  const clean = (raw ?? "").trim().replace(/^MAIL_TOKEN_KEY=/, "").replace(/^["']|["']$/g, "").trim();
+  const key = Buffer.from(clean, "base64");
   if (key.length !== 32) throw new Error("MAIL_TOKEN_KEY must be 32 random bytes, base64-encoded");
   return key;
 }

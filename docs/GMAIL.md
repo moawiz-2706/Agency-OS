@@ -60,6 +60,9 @@ node -e "console.log('CRON_SECRET=' + require('crypto').randomBytes(36).toString
 | `CRON_SECRET` | Lets the 5-minute timer trigger a run | Vercel and the cron job (step 4) |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | The Gmail app from step 1 | Vercel only |
 
+Optional sixth: `APP_URL` = your app's address (e.g. `https://agencyos.thesentinelsystems.com`). The Gmail
+redirect then always uses it, whichever address you opened the app on.
+
 Vercel → your project → **Settings → Environment Variables**: add all five (Production), then
 **Deployments → ⋯ → Redeploy**. For local testing, add the same lines to `web/.env.local`.
 
@@ -115,9 +118,10 @@ mailbox password (IMAP to read, SMTP to send), the way Outlook or a phone mail a
 1. GoDaddy → **My Products → Email** → set up the mailbox and give it a strong password
    used nowhere else. Log in once at **email.godaddy.com** to check it works.
 2. AgencyOS → **Account → Email inboxes → Add GoDaddy email** → enter the address and password →
-   **Test and connect**. The server settings are already filled in for GoDaddy
-   (`imap.secureserver.net:993`, `smtpout.secureserver.net:465`). AgencyOS logs in to check
-   both before saving anything.
+   **Test and connect**. GoDaddy sells two kinds of mailbox and AgencyOS tries both: newer
+   ones run on **Titan** (webmail at `…titan.email`; `imap.titan.email:993`, `smtp.titan.email:465`),
+   older ones on `imap.secureserver.net:993` / `smtpout.secureserver.net:465`. It logs in to
+   check reading and sending before saving anything.
 3. Fill in its **Signature** and **Max emails / day** (warming up: start at 5–10).
 4. If you have more than one inbox, **Make default** the one new leads should come from.
 
@@ -132,10 +136,14 @@ from your personal Gmail keep getting their follow-ups from Gmail, while new lea
 moawiz@thesentinelsystems.com.
 
 **Before cold email from a new domain**, check its DNS at GoDaddy → **Domain → DNS**:
-MX `mailstore1.secureserver.net` / `smtp.secureserver.net`, TXT `v=spf1 include:secureserver.net -all`,
+MX `mailstore1.secureserver.net` / `smtp.secureserver.net`, TXT `v=spf1 include:secureserver.net -all`
+(on Titan mailboxes, make it `v=spf1 include:secureserver.net include:spf.titan.email -all`),
 and add TXT `_dmarc` = `v=DMARC1; p=none; rua=mailto:you@yourdomain.com`. Send a test to
 mail-tester.com (aim for 9/10; if DKIM fails, ask GoDaddy support to enable DKIM for
 Professional Email), and warm the inbox up for 2–3 weeks before cold outreach.
+
+**Check it:** Account → Email inboxes → **Setup check** shows whether each setting is in place, and the
+exact Gmail redirect URI to register. It never shows secret values.
 
 ## Writing and sending
 

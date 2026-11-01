@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@supabase/supabase-js";
 import type { ImapFlow } from "imapflow";
 import { decryptToken } from "./crypto.ts";
+import { envValue } from "./env.ts";
 import { GoogleAuthError, accessToken, getMessage, listMessageIds, revokeToken, sendRaw } from "./google.ts";
 import { MailAuthError, openImap, sendImap, syncImap, type Brief, type ImapSettings } from "./imap.ts";
 import { addresses, buildRaw, header, toSyncMessage, type SyncMessage } from "./message.ts";
@@ -28,7 +29,7 @@ export type MailRunReport = { email: string; synced?: Record<string, number>; se
 type Rpc = <T>(fn: string, args: Record<string, unknown>) => Promise<T>;
 
 function workerDb(): Rpc {
-  const secret = process.env.MAILER_SECRET;
+  const secret = envValue("MAILER_SECRET");
   if (!secret || secret.length < 32) throw new Error("MAILER_SECRET is not set (32+ characters)");
   const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -65,6 +66,19 @@ export async function runMail(opts: { memberId?: string; send?: boolean } = {}):
     reports.push(report);
   }
   return reports;
+}
+
+/** null when MAILER_SECRET opens the database's mail functions, else what's wrong. */
+export async function mailerSecretProblem(): Promise<string | null> {
+  try {
+    await workerDb()("mailer_accounts", { p_member: "00000000-0000-0000-0000-000000000000" });
+    return null;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return /not authorised/.test(msg)
+      ? "MAILER_SECRET in Vercel doesn't match the database: run select mailer_set_secret('…') again with exactly the Vercel value"
+      : msg;
+  }
 }
 
 /** Revoke a Gmail inbox's grant at Google (before disconnecting it in the database). */

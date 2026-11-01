@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PasswordForm } from "@/components/password-form";
 import { MailAccountCard, type MailAccountRow } from "@/components/mail-account-card";
+import { mailSetupCheck } from "@/lib/mail/setup-check";
+import { headers } from "next/headers";
 
 export const metadata: Metadata = { title: "Account" };
 
@@ -15,10 +17,11 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
   const { reset, mail, reason } = await searchParams;
   const { member } = await currentMember();
   const supabase = await supabaseServer();
-  const [{ data: { user } }, mailRes, sendingRes] = await Promise.all([
+  const [{ data: { user } }, mailRes, sendingRes, checks] = await Promise.all([
     supabase.auth.getUser(),
     supabase.rpc("my_mail_accounts"),
     supabase.rpc("sending_enabled"),
+    mailSetupCheck(await headers()),
   ]);
   const mailAccounts = (mailRes.data as MailAccountRow[] | null) ?? [];
   const providers = new Set((user?.identities ?? []).map((i) => i.provider));
@@ -28,8 +31,8 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
       <PageHeader title="Account" description={`${memberName(member)} · ${user?.email ?? ""}`} />
 
       <div className="grid max-w-3xl gap-6">
-        <MailAccountCard accounts={mailAccounts}sendingEnabled={sendingRes.data === true} isOwner={member?.role === "owner"}
-          status={mail} reason={reason} fallbackName={memberName(member)} />
+        <MailAccountCard accounts={mailAccounts} sendingEnabled={sendingRes.data === true} isOwner={member?.role === "owner"}
+          status={mail} reason={reason} fallbackName={memberName(member)} checks={checks} />
 
         <Card>
           <CardHeader>
