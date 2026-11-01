@@ -1,7 +1,7 @@
 "use client";
 
-import { Suspense, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { use, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Loader2, MailCheck } from "lucide-react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -32,15 +32,14 @@ function GoogleIcon() {
   );
 }
 
-function LoginForm() {
+function LoginForm({ initialError }: { initialError: string }) {
   const router = useRouter();
-  const params = useSearchParams();
   const [mode, setMode] = useState<Mode>("password");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState<"google" | "form" | null>(null);
   const [sent, setSent] = useState(false);
-  const [error, setError] = useState(ERRORS[params.get("error") ?? ""] ?? "");
+  const [error, setError] = useState(initialError);
 
   const supabase = supabaseBrowser();
   const callback = `${typeof window === "undefined" ? "" : window.location.origin}/auth/callback`;
@@ -147,7 +146,10 @@ function LoginForm() {
   );
 }
 
-export default function LoginPage() {
+// No useSearchParams/Suspense: the form is part of the HTML the server sends, so it shows
+// even before (or without) the browser running the page's JavaScript.
+export default function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  const { error } = use(searchParams);
   return (
     <main className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
       <div className="w-full max-w-sm space-y-6">
@@ -157,7 +159,7 @@ export default function LoginPage() {
             <CardTitle className="text-xl">Sign in</CardTitle>
             <CardDescription>Use your Google account or your email and password.</CardDescription>
           </CardHeader>
-          <Suspense><LoginForm /></Suspense>
+          <LoginForm initialError={ERRORS[error ?? ""] ?? ""} />
         </Card>
         <p className="text-center text-xs text-muted-foreground">
           Team members only. New accounts need the owner&apos;s approval. · <Link href="/privacy" className="underline-offset-4 hover:underline">Privacy</Link>

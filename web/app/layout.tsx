@@ -30,9 +30,17 @@ export const viewport: Viewport = {
   ],
 };
 
+const LEGACY_POLYFILLS = `(function(){function at(n){n=Math.trunc(n)||0;if(n<0)n+=this.length;return n<0||n>=this.length?undefined:this[n];}
+[Array,String].forEach(function(C){if(!C.prototype.at)Object.defineProperty(C.prototype,"at",{value:at,writable:true,configurable:true});});
+if(!Object.hasOwn)Object.hasOwn=function(o,k){return Object.prototype.hasOwnProperty.call(o,k);};})();`;
+
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={cn("font-sans", sans.variable, mono.variable)} suppressHydrationWarning>
+      <head>
+        {/* Small fallbacks for older iPhones (iOS 15), before any app code runs. */}
+        <script dangerouslySetInnerHTML={{ __html: LEGACY_POLYFILLS }} />
+      </head>
       <body className="min-h-screen bg-background text-foreground antialiased">
         <ThemeProvider>
           <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
