@@ -217,6 +217,11 @@ and excludes `*.test.ts`.
 
 ## Gotchas
 
+- **Speed:** Supabase is in **Stockholm (eu-north-1)**, so `web/vercel.json` pins Vercel functions to `arn1` (Stockholm).
+  Without it they ran in Washington DC and every query crossed the Atlantic. Keep a page's queries in one `Promise.all`;
+  `currentMember()` (React-cached) reads the session (`getClaims`) and the active team in parallel. Supabase query
+  builders only run when awaited: wrap one in `Promise.resolve()` to start it early.
+
 - This PC's DNS drops connections now and then (`git`, `gh`, `curl`, `npm` fail with "could not resolve
   host"): just retry.
 - Next.js 16: `proxy.ts` replaces `middleware.ts`; route files may only export route handlers/config (put

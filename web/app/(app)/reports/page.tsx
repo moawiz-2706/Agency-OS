@@ -50,13 +50,17 @@ export default async function ReportsPage() {
   const since = new Date(new Date().getTime() - DAYS * 86400_000).toISOString();
 
   // Every lead (in pages: the API returns at most 1,000 rows at a time).
-  const leads: FunnelLead[] = [];
-  for (let from = 0; from < 20_000; from += 1000) {
-    const { data } = await supabase.from("companies").select("id,stage,trade,region,source,touches_count").order("id").range(from, from + 999);
-    leads.push(...((data ?? []) as FunnelLead[]));
-    if (!data || data.length < 1000) break;
-  }
-  const [repliedRes, sentRes, bounceRes, replyRes, unsubRes, inboxesRes, dealsRes] = await Promise.all([
+  const loadLeads = async () => {
+    const out: FunnelLead[] = [];
+    for (let from = 0; from < 20_000; from += 1000) {
+      const { data } = await supabase.from("companies").select("id,stage,trade,region,source,touches_count").order("id").range(from, from + 999);
+      out.push(...((data ?? []) as FunnelLead[]));
+      if (!data || data.length < 1000) break;
+    }
+    return out;
+  };
+  const [leads, repliedRes, sentRes, bounceRes, replyRes, unsubRes, inboxesRes, dealsRes] = await Promise.all([
+    loadLeads(),
     supabase.from("inbound_messages").select("company_id").not("company_id", "is", null)
       .or("classification.is.null,classification.not.in.(bounce,out_of_office)").limit(10_000),
     supabase.from("outreach_messages").select("sent_at,mail_account_id").eq("status", "sent").gte("sent_at", since).limit(10_000),

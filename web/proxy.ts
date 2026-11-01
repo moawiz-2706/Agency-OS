@@ -29,8 +29,10 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  // getUser() revalidates the token with Supabase; don't put code between createServerClient and this.
-  const { data: { user } } = await supabase.auth.getUser();
+  // getClaims() verifies the sign-in token (and refreshes it when it's expiring); don't put code between
+  // createServerClient and this.
+  const { data } = await supabase.auth.getClaims();
+  const user = data?.claims?.sub ? data.claims : null;
 
   const path = request.nextUrl.pathname;
   if (!user && !PUBLIC.some((p) => path.startsWith(p))) {
