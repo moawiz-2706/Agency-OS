@@ -81,6 +81,12 @@ export async function mailerSecretProblem(): Promise<string | null> {
   }
 }
 
+/** A member's own IMAP (GoDaddy) inboxes with their decrypted settings, for the live Mailbox page. */
+export async function myImapInboxes(memberId: string) {
+  const accounts = await workerDb()<Account[]>("mailer_accounts", { p_member: memberId });
+  return accounts.filter((a) => a.provider === "imap").map((a) => ({ id: a.id, email: a.email, imapHost: a.imap_host!, settings: imapSettings(a) }));
+}
+
 /** Revoke a Gmail inbox's grant at Google (before disconnecting it in the database). */
 export async function revokeInbox(memberId: string, accountId: string) {
   const rpc = workerDb();

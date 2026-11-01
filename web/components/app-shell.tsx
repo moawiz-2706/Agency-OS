@@ -3,27 +3,25 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { Inbox, KanbanSquare, LayoutDashboard, LogOut, Menu, UserCog, Users } from "lucide-react";
+import { Inbox, KanbanSquare, LayoutDashboard, LogOut, Mail, Menu, UserCog, Users } from "lucide-react";
+import { Brand as BrandLink } from "@/components/brand";
+import { ThemeToggle } from "@/components/theme";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/leads", label: "Leads", icon: Users },
   { href: "/pipeline", label: "Pipeline", icon: KanbanSquare },
   { href: "/inbox", label: "Inbox", icon: Inbox },
+  { href: "/mailbox", label: "Mailbox", icon: Mail },
 ];
 
 type Me = { name: string; email: string; initials: string; color: string; role: string };
 
 function Brand() {
-  return (
-    <Link href="/" className="flex items-center gap-2 px-2 font-semibold tracking-tight">
-      <span className="flex size-7 items-center justify-center rounded-md bg-primary text-xs font-bold text-primary-foreground">A</span>
-      AgencyOS
-    </Link>
-  );
+  return <BrandLink href="/dashboard" className="px-2" />;
 }
 
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
@@ -31,7 +29,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <nav className="flex flex-col gap-0.5">
       {NAV.map(({ href, label, icon: Icon }) => {
-        const active = href === "/" ? path === "/" : path.startsWith(href);
+        const active = path.startsWith(href);
         return (
           <Link key={href} href={href} onClick={onNavigate}
             className={cn(
@@ -57,6 +55,7 @@ function UserCard({ me }: { me: Me }) {
         <div className="truncate text-sm font-medium">{me.name}</div>
         <div className="truncate text-xs text-muted-foreground capitalize">{me.role}</div>
       </div>
+      <ThemeToggle />
       <Button variant="ghost" size="icon" asChild aria-label="Account" title="Account">
         <Link href="/account"><UserCog /></Link>
       </Button>

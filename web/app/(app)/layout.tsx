@@ -21,7 +21,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <h1 className="text-lg font-semibold">{pending ? "Waiting for approval" : "Not on the team"}</h1>
               <p className="mt-1 text-sm text-muted-foreground">
                 {pending
-                  ? <>You&apos;re signed in as <span className="font-medium text-foreground">{user.email}</span>. The owner has to approve your account before you can see AgencyOS. Check back once they have.</>
+                  ? <>You&apos;re signed in as <span className="font-medium text-foreground">{user.email}</span>. The owner has to approve your account before you can see the workspace. Check back once they have.</>
                   : <>{user.email} is signed in but isn&apos;t a team member. Ask the owner to add you.</>}
               </p>
             </div>

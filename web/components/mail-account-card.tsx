@@ -133,7 +133,7 @@ export function MailAccountCard({ accounts, sendingEnabled, isOwner, status, rea
                 </div>
               </details>
               <p className="text-xs text-muted-foreground sm:col-span-2">
-                AgencyOS logs in to check the password works, then stores it encrypted (AES-256). It&apos;s never shown again and
+                We log in to check the password works, then stores it encrypted (AES-256). It&apos;s never shown again and
                 can&apos;t be read from the database; Disconnect deletes it.
               </p>
               <SubmitButton size="sm" className="w-fit">Test and connect</SubmitButton>

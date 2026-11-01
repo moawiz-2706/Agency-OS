@@ -9,6 +9,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { Brand } from "@/components/brand";
+import Link from "next/link";
 
 const ERRORS: Record<string, string> = {
   not_on_team: "Sign-ups are closed for that email. Ask the owner to add you.",
@@ -68,7 +70,7 @@ function LoginForm() {
           : error.message);
         return;
       }
-      router.replace("/");
+      router.replace("/dashboard");
       router.refresh();
       return;
     }
@@ -149,10 +151,7 @@ export default function LoginPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
       <div className="w-full max-w-sm space-y-6">
-        <div className="flex items-center justify-center gap-2 text-lg font-semibold tracking-tight">
-          <span className="flex size-8 items-center justify-center rounded-md bg-primary text-sm font-bold text-primary-foreground">A</span>
-          AgencyOS
-        </div>
+        <div className="flex justify-center"><Brand className="text-lg" /></div>
         <Card>
           <CardHeader className="text-center">
             <CardTitle className="text-xl">Sign in</CardTitle>
@@ -160,7 +159,9 @@ export default function LoginPage() {
           </CardHeader>
           <Suspense><LoginForm /></Suspense>
         </Card>
-        <p className="text-center text-xs text-muted-foreground">Team members only. New accounts need the owner&apos;s approval.</p>
+        <p className="text-center text-xs text-muted-foreground">
+          Team members only. New accounts need the owner&apos;s approval. · <Link href="/privacy" className="underline-offset-4 hover:underline">Privacy</Link>
+        </p>
       </div>
     </main>
   );
