@@ -65,7 +65,7 @@ function Field({ label, children, className }: { label: string; children: React.
 export default async function LeadPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await supabaseServer();
-  const [team, companyRes, contactsRes, touchesRes, notesRes, actsRes, auditRes, reportRes, outRes, inRes, mailRes, inboxRes, { member: me }] = await Promise.all([
+  const [team, companyRes, contactsRes, touchesRes, notesRes, actsRes, auditRes, reportRes, outRes, inRes, mailRes, inboxRes, { member: me }, dealRes, tasksRes] = await Promise.all([
     teamMembers(),
     supabase.from("companies").select("*").eq("id", id).maybeSingle(),
     supabase.from("contacts").select("id,full_name,role,email,phone,consent_basis,email_is_role,do_not_contact,source_url").eq("company_id", id).order("created_at"),
@@ -82,15 +82,12 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     supabase.rpc("my_mail_accounts"),
     supabase.rpc("team_inboxes"),
     currentMember(),
-  ]);
-  const c = companyRes.data as Company | null;
-  if (!c) notFound();
-  // Missing until migration 0012 runs: then the cards just start empty.
-  const [dealRes, tasksRes] = await Promise.all([
     supabase.from("deals").select("offer,currency,setup_fee_cents,monthly_fee_cents,stage,probability,expected_close,notes").eq("company_id", id).maybeSingle(),
     supabase.from("tasks").select("id,title,due_at,done_at,company_id,assignee_id,companies(name)").eq("company_id", id).is("done_at", null)
       .order("due_at", { ascending: true, nullsFirst: false }).limit(50),
   ]);
+  const c = companyRes.data as Company | null;
+  if (!c) notFound();
   const deal = (dealRes.data ?? null) as Deal | null;
   const leadTasks = ((tasksRes.data ?? []) as unknown as TaskRowData[]).map((t) => toTaskItem(t, team));
 

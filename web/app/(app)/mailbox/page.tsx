@@ -75,6 +75,12 @@ export default async function MailboxPage({ searchParams }: { searchParams: Prom
     return s ? `/mailbox?${s}` : "/mailbox";
   };
 
+  // Database reads that don't depend on the mail server start now, while it's being read.
+  const supabase = await supabaseServer();
+  // (Supabase queries only run once awaited: Promise.resolve starts them now.)
+  const accountsP = compose ? Promise.resolve(supabase.rpc("my_mail_accounts")) : null;
+  const scheduledP = Promise.resolve(supabase.rpc("my_scheduled_mail", { p_account: inbox.id }));
+
   let view: MailboxView = { folders: ["inbox"], unread: 0, total: 0, items: [], message: null };
   let error: string | null = null;
   try {
@@ -85,14 +91,13 @@ export default async function MailboxPage({ searchParams }: { searchParams: Prom
   const message = view.message;
 
   // Which senders/recipients are leads in the CRM (team-visible data, through RLS).
-  const supabase = await supabaseServer();
   const addrs = [...new Set([...view.items.flatMap((m) => [m.from, ...m.to]), ...(message?.addresses ?? []), sp.to?.toLowerCase() ?? ""])]
     .filter((a) => a && a !== inbox.email);
   const leads = new Map<string, Lead>();
   const [contactsRes, accountsRes, scheduledRes] = await Promise.all([
     addrs.length ? supabase.from("contacts").select("email,company_id,companies(name)").in("email", addrs.slice(0, 300)) : null,
-    compose ? supabase.rpc("my_mail_accounts") : null,
-    supabase.rpc("my_scheduled_mail", { p_account: inbox.id }),   // missing until migration 0009 runs
+    accountsP,
+    scheduledP,
   ]);
   const scheduled = (scheduledRes.data ?? []) as Scheduled[];
   const waiting = scheduled.filter((m) => m.status === "scheduled" || m.status === "sending").length;

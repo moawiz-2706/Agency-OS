@@ -34,20 +34,21 @@ const CLOSED = ["won", "lost", "disqualified"];
 export default async function SequencePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await supabaseServer();
-  const { member: me } = await currentMember();
-  const { data: cp } = await supabase.from("campaigns").select("id,name,description,status,template_ids,step_days,send_time,skip_weekends").eq("id", id).maybeSingle();
-  if (!cp) notFound();
-  const c = cp as Campaign;
-
-  const [tplRes, memRes, msgRes, sumRes, inboxRes, facetsRes] = await Promise.all([
-    c.template_ids.length ? supabase.from("templates").select("id,subject,body").in("id", c.template_ids) : null,
+  // Everything that doesn't need the sequence's own row is loaded alongside it.
+  const [{ member: me }, { data: cp }, memRes, msgRes, sumRes, inboxRes, facetsRes, hookRes] = await Promise.all([
+    currentMember(),
+    supabase.from("campaigns").select("id,name,description,status,template_ids,step_days,send_time,skip_weekends").eq("id", id).maybeSingle(),
     supabase.from("campaign_members").select("company_id,contact_id,created_at,stopped_reason,companies(name,stage),contacts(email,full_name)")
       .eq("campaign_id", id).order("created_at", { ascending: false }).limit(300),
     supabase.from("outreach_messages").select("company_id,step,status,scheduled_for,sent_at,member_id").eq("campaign_id", id).limit(3000),
     supabase.rpc("sequence_summary"),
     supabase.rpc("my_mail_accounts"),
     supabase.from("v_lead_facets").select("region,trade,leads"),
+    supabase.from("research_reports").select("company_id").not("hook", "is", null).limit(1).maybeSingle(),
   ]);
+  if (!cp) notFound();
+  const c = cp as Campaign;
+  const tplRes = c.template_ids.length ? await supabase.from("templates").select("id,subject,body").in("id", c.template_ids) : null;
   const tpl = new Map(((tplRes?.data ?? []) as { id: string; subject: string; body: string }[]).map((t) => [t.id, t]));
   const steps = c.template_ids.map((tid, i) => ({
     template_id: tid, day: c.step_days[i] ?? i * 4 + 1, subject: tpl.get(tid)?.subject ?? "", body: tpl.get(tid)?.body ?? "",
@@ -65,7 +66,7 @@ export default async function SequencePage({ params }: { params: Promise<{ id: s
   // A real lead to preview the steps with: the newest one in the sequence, else one with research.
   let sample: Parameters<typeof SequenceEditor>[0]["sample"] = null;
   const sampleId = members[0]?.company_id
-    ?? (await supabase.from("research_reports").select("company_id").not("hook", "is", null).limit(1).maybeSingle()).data?.company_id;
+    ?? hookRes.data?.company_id;
   if (sampleId) {
     const [{ data: co }, { data: ct }, { data: rr }] = await Promise.all([
       supabase.from("companies").select("name,city,trade,niche,website").eq("id", sampleId).maybeSingle(),
