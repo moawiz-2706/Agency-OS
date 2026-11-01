@@ -126,6 +126,9 @@ and excludes `*.test.ts`.
   stop decrypting).
 
 ### Web app
+- `/reports` (no migration; reads through RLS, `lib/reports.ts`): funnel (how far each lead got; lost/nurture count
+  up to touches/replies) overall + by trade + by state, deliverability per inbox and per day (14 days, bounce alarm = the
+  0008 guard rule), pipeline money from `deals` (open setup/monthly, weighted by probability, won MRR).
 - Routes: `/dashboard`, `/leads`, `/leads/[id]` (Email card: compose/schedule in the lead's time zone,
   approve, send now, replies), `/pipeline`, `/inbox` (replies to handle, approvals, failures), `/mailbox`,
   `/account` (inboxes, signature, limits, kill switch, password), `/privacy`, `/terms` (public; Google's app
