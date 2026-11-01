@@ -9,7 +9,12 @@ import { imapToSync } from "./imap-parse.ts";
 // GoDaddy Professional Email, and most other hosts. The password is only ever held
 // in memory here, decrypted for the run.
 
-export const GODADDY = { imap_host: "imap.secureserver.net", imap_port: 993, smtp_host: "smtpout.secureserver.net", smtp_port: 465 };
+/** Server settings by host. GoDaddy sells two kinds of mailbox: newer ones run on Titan (webmail at *.titan.email). */
+export const PRESETS = {
+  titan: { imap_host: "imap.titan.email", imap_port: 993, smtp_host: "smtp.titan.email", smtp_port: 465 },
+  godaddy_classic: { imap_host: "imap.secureserver.net", imap_port: 993, smtp_host: "smtpout.secureserver.net", smtp_port: 465 },
+} as const;
+export type PresetKey = keyof typeof PRESETS;
 export type ImapSettings = { email: string; password: string; imap_host: string; imap_port: number; smtp_host: string; smtp_port: number };
 export type Brief = { id: string; thread_id: string; from: string; to: string[] };
 

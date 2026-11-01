@@ -5,7 +5,7 @@ import { supabaseServer } from "@/lib/supabase/server";
 import { currentMember } from "@/lib/team";
 import { zonedLocalToIso } from "@/lib/tz";
 import { revokeInbox, runMail } from "@/lib/mail/worker";
-import { GODADDY, testLogin } from "@/lib/mail/imap";
+import { PRESETS, testLogin, type PresetKey } from "@/lib/mail/imap";
 import { encryptToken } from "@/lib/mail/crypto";
 import { memberName } from "@/lib/crm";
 import { after } from "next/server";
@@ -177,12 +177,31 @@ export async function connectImapInbox(form: FormData): Promise<ActionResult> {
       if (!Number.isInteger(n) || n < 1 || n > 65535) throw new Error("Check the port numbers");
       return n;
     };
-    const settings = {
-      email, password,
-      imap_host: (str(form, "imap_host") ?? GODADDY.imap_host).toLowerCase(), imap_port: port("imap_port", GODADDY.imap_port),
-      smtp_host: (str(form, "smtp_host") ?? GODADDY.smtp_host).toLowerCase(), smtp_port: port("smtp_port", GODADDY.smtp_port),
-    };
-    await testLogin(settings);
+    // "auto" tries GoDaddy's newer Titan servers, then its classic ones (one login attempt each).
+    const preset = str(form, "preset") ?? "auto";
+    const candidates = preset === "custom"
+      ? [{
+          imap_host: (str(form, "imap_host") ?? "").toLowerCase(), imap_port: port("imap_port", 993),
+          smtp_host: (str(form, "smtp_host") ?? "").toLowerCase(), smtp_port: port("smtp_port", 465),
+        }]
+      : preset in PRESETS ? [PRESETS[preset as PresetKey]] : [PRESETS.titan, PRESETS.godaddy_classic];
+    let settings: Parameters<typeof testLogin>[0] | null = null;
+    const problems: string[] = [];
+    for (const servers of candidates) {
+      if (!servers.imap_host || !servers.smtp_host) throw new Error("Enter both server names");
+      try {
+        await testLogin({ email, password, ...servers });
+        settings = { email, password, ...servers };
+        break;
+      } catch (e) {
+        problems.push(`${servers.imap_host}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+    if (!settings) {
+      throw new Error(candidates.length > 1
+        ? `Couldn't log in on GoDaddy's servers. Check the password at your webmail first. Details: ${problems.join(" | ")}`
+        : problems[0]);
+    }
     await rpc("save_my_imap_account", {
       p_email: email, p_from_name: memberName(member), p_secret_encrypted: encryptToken(password, email),
       p_imap_host: settings.imap_host, p_imap_port: settings.imap_port, p_smtp_host: settings.smtp_host, p_smtp_port: settings.smtp_port,

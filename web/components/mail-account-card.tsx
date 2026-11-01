@@ -1,6 +1,7 @@
 import { AlertTriangle, CheckCircle2, Mail, RefreshCw, Star } from "lucide-react";
 import { connectImapInbox, disconnectInbox, saveMailSettings, setDefaultInbox, setSendingEnabled, syncMyInbox } from "@/app/(app)/mail-actions";
 import { ago } from "@/lib/format";
+import type { SetupCheck } from "@/lib/mail/setup-check";
 import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/submit-button";
 import { Badge } from "@/components/ui/badge";
@@ -60,9 +61,11 @@ function Inbox({ a, fallbackName }: { a: MailAccountRow; fallbackName: string })
   );
 }
 
-export function MailAccountCard({ accounts, sendingEnabled, isOwner, status, reason, fallbackName }: {
+export function MailAccountCard({ accounts, sendingEnabled, isOwner, status, reason, fallbackName, checks }: {
   accounts: MailAccountRow[]; sendingEnabled: boolean; isOwner: boolean; status?: string; reason?: string; fallbackName: string;
+  checks: SetupCheck[];
 }) {
+  const failing = checks.filter((c) => !c.ok).length;
   return (
     <Card className={status ? "border-primary/30 shadow-sm" : undefined}>
       <CardHeader>
@@ -75,6 +78,21 @@ export function MailAccountCard({ accounts, sendingEnabled, isOwner, status, rea
       <CardContent className="space-y-5">
         {status === "connected" && <p className="flex items-center gap-2 text-sm text-emerald-700"><CheckCircle2 className="size-4" />Gmail connected. The first sync looks back 14 days.</p>}
         {status === "error" && <p className="flex items-start gap-2 text-sm text-red-700"><AlertTriangle className="mt-0.5 size-4 shrink-0" />{reason || "Couldn't connect Gmail."}</p>}
+
+        <details open={failing > 0} className="rounded-lg border p-3">
+          <summary className="cursor-pointer text-sm font-medium">
+            Setup check: {failing ? <span className="text-red-700">{failing} setting(s) need fixing</span> : <span className="text-emerald-700">all good</span>}
+          </summary>
+          <ul className="mt-2 space-y-1.5 text-xs">
+            {checks.map((c) => (
+              <li key={c.label} className="flex items-start gap-2">
+                {c.ok ? <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-emerald-600" /> : <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-red-600" />}
+                <span><b>{c.label}</b>: <span className="break-all text-muted-foreground">{c.detail}</span></span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs text-muted-foreground">After changing a setting in Vercel, redeploy, then reload this page.</p>
+        </details>
 
         {accounts.length > 0 && (
           <div className="space-y-3">
@@ -97,12 +115,20 @@ export function MailAccountCard({ accounts, sendingEnabled, isOwner, status, rea
             <ActionForm action={connectImapInbox} reset className="mt-3 grid gap-3 sm:grid-cols-2">
               <Field label="Email address"><Input name="email" type="email" required placeholder="moawiz@thesentinelsystems.com" autoComplete="off" /></Field>
               <Field label="Mailbox password"><Input name="password" type="password" required autoComplete="new-password" /></Field>
+              <Field label="Mail servers" className="sm:col-span-2">
+                <select name="preset" defaultValue="auto" className="h-9 w-full rounded-md border bg-transparent px-3 text-sm">
+                  <option value="auto">GoDaddy: find it automatically (Titan first, then classic)</option>
+                  <option value="titan">GoDaddy Professional Email on Titan (webmail at …titan.email)</option>
+                  <option value="godaddy_classic">GoDaddy classic (webmail at email.godaddy.com)</option>
+                  <option value="custom">Another provider: enter the servers below</option>
+                </select>
+              </Field>
               <details className="sm:col-span-2">
-                <summary className="cursor-pointer text-xs text-muted-foreground">Server settings (already set for GoDaddy)</summary>
+                <summary className="cursor-pointer text-xs text-muted-foreground">Servers for &quot;another provider&quot;</summary>
                 <div className="mt-2 grid grid-cols-[1fr_6rem] gap-3">
-                  <Field label="IMAP server (reading)"><Input name="imap_host" defaultValue="imap.secureserver.net" /></Field>
+                  <Field label="IMAP server (reading)"><Input name="imap_host" placeholder="imap.example.com" /></Field>
                   <Field label="Port"><Input name="imap_port" type="number" defaultValue={993} /></Field>
-                  <Field label="SMTP server (sending)"><Input name="smtp_host" defaultValue="smtpout.secureserver.net" /></Field>
+                  <Field label="SMTP server (sending)"><Input name="smtp_host" placeholder="smtp.example.com" /></Field>
                   <Field label="Port"><Input name="smtp_port" type="number" defaultValue={465} /></Field>
                 </div>
               </details>

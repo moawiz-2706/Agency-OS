@@ -1,4 +1,5 @@
 import "server-only";
+import { envValue } from "./env.ts";
 
 // Google OAuth and the few Gmail API calls AgencyOS needs, over plain fetch.
 // Scopes: send mail, read mail (to sync replies), and the address itself. Nothing
@@ -18,7 +19,7 @@ export const STATE_COOKIE = "gmail_oauth_state";
 export class GoogleAuthError extends Error {}
 
 function client() {
-  const id = process.env.GOOGLE_CLIENT_ID, secret = process.env.GOOGLE_CLIENT_SECRET;
+  const id = envValue("GOOGLE_CLIENT_ID"), secret = envValue("GOOGLE_CLIENT_SECRET");
   if (!id || !secret) throw new Error("GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET are not set");
   return { id, secret };
 }
