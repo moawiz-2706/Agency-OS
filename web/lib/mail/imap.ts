@@ -66,7 +66,7 @@ export async function testLogin(s: ImapSettings) {
   }
 }
 
-async function sentFolder(c: ImapFlow) {
+export async function sentFolder(c: ImapFlow) {
   const list = await c.list();
   return list.find((f) => f.specialUse === "\\Sent")?.path
     ?? list.find((f) => /^(inbox[./])?sent( items| messages| mail)?$/i.test(f.path))?.path

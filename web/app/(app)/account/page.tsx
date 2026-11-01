@@ -37,7 +37,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
         <Card>
           <CardHeader>
             <CardTitle>Sign-in methods</CardTitle>
-            <CardDescription>Any of these gets you into AgencyOS.</CardDescription>
+            <CardDescription>Any of these gets you into The Sentinel Systems.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
             <Badge variant="outline" className={providers.has("google") ? "border-emerald-200 bg-emerald-50 text-emerald-700" : ""}>

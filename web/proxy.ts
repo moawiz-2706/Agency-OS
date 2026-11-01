@@ -1,8 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-// /api/mail/tick checks its own secret (pg_cron calls it without a session).
-const PUBLIC = ["/login", "/auth/", "/api/mail/tick"];
+// The website, PWA files and /api/mail/tick (which checks its own secret) need no sign-in.
+const PUBLIC = ["/login", "/auth/", "/api/mail/tick", "/privacy", "/terms", "/offline", "/icons/", "/icon", "/apple-icon", "/manifest.webmanifest", "/sw.js"];
+const PUBLIC_EXACT = ["/"];
 
 /** Refresh the Supabase session on every request and send signed-out visitors to /login. */
 export async function proxy(request: NextRequest) {
@@ -32,7 +33,7 @@ export async function proxy(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
-  if (!user && !PUBLIC.some((p) => path.startsWith(p))) {
+  if (!user && !PUBLIC_EXACT.includes(path) && !PUBLIC.some((p) => path.startsWith(p))) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.search = "";

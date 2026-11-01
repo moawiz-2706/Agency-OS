@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
 /** Only same-site paths; a password-reset link goes to the account page to set the new one. */
 function safeNext(next: string | null, type: EmailOtpType | null) {
   if (type === "recovery") return "/account?reset=1";
-  return next && next.startsWith("/") && !next.startsWith("//") ? next : "/";
+  return next && next.startsWith("/") && !next.startsWith("//") && next !== "/" ? next : "/dashboard";
 }
 
 function reason(message: string) {
