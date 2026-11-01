@@ -61,8 +61,10 @@ export async function updateLead(id: string, form: FormData): Promise<ActionResu
       owner_id: owner && owner !== "none" ? uuid(owner) : null,
       next_step: str(form, "next_step"),
       next_step_at: teamLocalToIso(str(form, "next_step_at")),
-      deal_value_cents: deal ? Math.round(Number(deal.replace(/[^0-9.]/g, "")) * 100) || null : null,
-      deal_currency: currency === "CAD" ? "CAD" : "USD",
+      ...(form.has("deal_value") && {
+        deal_value_cents: deal ? Math.round(Number(deal.replace(/[^0-9.]/g, "")) * 100) || null : null,
+        deal_currency: currency === "CAD" ? "CAD" : "USD",
+      }),
       lost_reason: str(form, "lost_reason"),
     };
     const supabase = await supabaseServer();
@@ -134,5 +136,36 @@ export async function addContact(id: string, country: string | null, form: FormD
       consent_basis: !email ? "unknown" : country === "US" ? "can_spam_b2b" : country === "CA" && ownSite && str(form, "source_url") ? "casl_implied_published" : "unknown",
     }));
     revalidatePath(`/leads/${id}`);
+  });
+}
+
+const cents = (v: string | null) => (v ? Math.round(Number(v.replace(/[^0-9.]/g, "")) * 100) || null : null);
+const DEAL_STAGE_TO_LEAD: Record<string, Stage | null> = { open: null, proposal_sent: "proposal_sent", won: "won", lost: "lost" };
+
+/** The lead's deal: offer, setup + monthly fee. Its stage moves the lead too (proposal sent, won, lost). */
+export async function saveDeal(companyId: string, form: FormData): Promise<ActionResult> {
+  return attempt(async () => {
+    const stage = str(form, "deal_stage") ?? "open";
+    if (!(stage in DEAL_STAGE_TO_LEAD)) throw new Error("Unknown deal stage");
+    const setup = cents(str(form, "setup_fee"));
+    const monthly = cents(str(form, "monthly_fee"));
+    const probability = str(form, "probability");
+    const currency = str(form, "currency") === "CAD" ? "CAD" : "USD";
+    const supabase = await supabaseServer();
+    const { data: existing } = await supabase.from("deals").select("stage,won_at").eq("company_id", companyId).maybeSingle();
+    await check(supabase.from("deals").upsert({
+      company_id: companyId, offer: str(form, "offer"), currency, setup_fee_cents: setup, monthly_fee_cents: monthly,
+      stage, probability: probability ? Math.max(0, Math.min(100, Number(probability))) / 100 : null,
+      expected_close: str(form, "expected_close"), notes: str(form, "notes"),
+      won_at: stage === "won" ? existing?.won_at ?? new Date().toISOString() : null,
+    }, { onConflict: "company_id" }));
+    // Keep the lead's single "deal value" (first-year value) and stage in step with the deal.
+    const leadStage = DEAL_STAGE_TO_LEAD[stage];
+    await check(supabase.from("companies").update({
+      deal_value_cents: setup || monthly ? (setup ?? 0) + 12 * (monthly ?? 0) : null, deal_currency: currency,
+      ...(leadStage && existing?.stage !== stage && { stage: leadStage }),
+    }).eq("id", companyId));
+    revalidatePath(`/leads/${companyId}`);
+    revalidatePath("/pipeline");
   });
 }

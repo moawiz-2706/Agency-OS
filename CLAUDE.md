@@ -140,6 +140,16 @@ and excludes `*.test.ts`.
   which are missing/wrong without revealing values. Don't change `MAIL_TOKEN_KEY` (stored secrets would
   stop decrypting).
 
+### Tasks, deals, reply labels (`0012`)
+- `tasks` (optional lead, assignee, due, done; team RLS, delete = creator or owner). `/tasks` lists mine/everyone by
+  overdue / today / coming up / no date, and includes leads whose `next_step_at` is within a week (ticking clears it).
+  Lead page: Tasks card + Deal card (the Status card no longer edits deal value).
+- `deals`: one per lead (`deals_company_uq`), offer key, setup + monthly fee, stage open/proposal_sent/won/lost.
+  `saveDeal` mirrors first-year value into `companies.deal_value_cents` and moves the lead to proposal_sent/won/lost.
+- `classify_reply(id, label)`: interested/meeting_request -> stage interested + task "Send X the booking link";
+  question/pricing -> at least replied; not_now -> nurture, stop pending, task in 60 days; not_interested -> lost;
+  unsubscribe -> suppress. Inbox shows label buttons with a suggestion (`lib/replies.ts`, keyword rules) and a
+  suggested answer using `booking_url()` (owner sets it on Account).
 ### Website form (`0011`, `docs/WEB-FORM.md`)
 - Public `POST /api/forms/contact` (CORS: `FORM_ORIGINS`, default the main domain + www) and an embeddable
   `/forms/contact` page (iframe, always light, posts its height to the parent). `lib/forms.ts` traps bots (hidden
