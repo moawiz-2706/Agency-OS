@@ -140,6 +140,16 @@ and excludes `*.test.ts`.
   which are missing/wrong without revealing values. Don't change `MAIL_TOKEN_KEY` (stored secrets would
   stop decrypting).
 
+### Sequences (`0010`)
+- A sequence = a `campaigns` row; steps = `templates` rows in `template_ids` order, days in `step_days`, sent at
+  `send_time` in each lead's time zone, moved off weekends. `/sequences` + `/sequences/[id]` (steps editor with merge
+  fields + preview, add leads by filter, approve all, pause/resume, remove a lead); Leads table bulk action "Add to sequence".
+- `enroll_in_sequence` picks each lead's best emailable contact (named person before shared inbox, `outreach_block_reason`
+  clear), skips closed leads / already enrolled / already has emails waiting, and inserts `pending_approval` drafts from the
+  enrolling member (later steps with no subject become `Re: <step 1 subject>` so they thread). `merge_template` fills
+  `{{first_name}} {{full_name}} {{company}} {{city}} {{trade}} {{website}} {{personal_line}}` (research hook) `{{my_name}}`;
+  `lib/sequences.ts` mirrors it for previews and rejects unknown tags. Pausing sends approved emails back to approval.
+
 ### Web app
 - Routes: `/dashboard`, `/leads`, `/leads/[id]` (Email card: compose/schedule in the lead's time zone,
   approve, send now, replies), `/pipeline`, `/inbox` (replies to handle, approvals, failures), `/mailbox`,
