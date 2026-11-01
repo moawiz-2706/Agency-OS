@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search, Sparkles, X } from "lucide-react";
 import { supabaseServer } from "@/lib/supabase/server";
 import { teamMembers } from "@/lib/team";
 import { STAGE_LABEL, STAGES, memberName } from "@/lib/crm";
@@ -100,7 +100,9 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
 
   return (
     <>
-      <PageHeader title="Leads" description={`${total.toLocaleString()} ${filtered ? "matching" : "in total"}`} />
+      <PageHeader title="Leads" description={`${total.toLocaleString()} ${filtered ? "matching" : "in total"}`}>
+        <Button asChild variant="outline" size="sm"><Link href="/leads/ai-emails"><Sparkles />AI email drafts</Link></Button>
+      </PageHeader>
 
       <Card className="py-4">
         <CardContent className="px-4">
