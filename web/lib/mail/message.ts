@@ -29,22 +29,29 @@ export type Outgoing = {
   to: string; to_name?: string | null;
   subject: string; body: string; signature?: string | null;
   in_reply_to?: string | null; references?: string | null;
+  /** Set for SMTP sends (Gmail adds its own): "<id@domain>" and the send time. */
+  message_id?: string | null; date?: Date | null;
 };
 
-/** RFC 5322 message as Gmail's `raw` field (base64url). Plain text only: no tracking, no HTML. */
-export function buildRaw(m: Outgoing): string {
+/** The full RFC 5322 message. Plain text only: no tracking, no HTML. */
+export function buildMime(m: Outgoing): string {
   const headers = [
     `From: ${mailbox(m.from_email, m.from_name)}`,
     `To: ${mailbox(m.to, m.to_name)}`,
     `Subject: ${encodeHeader(oneLine(m.subject))}`,
-    "MIME-Version: 1.0",
-    'Content-Type: text/plain; charset="UTF-8"',
-    "Content-Transfer-Encoding: base64",
   ];
+  if (m.date) headers.push(`Date: ${m.date.toUTCString().replace("GMT", "+0000")}`);
+  if (m.message_id) headers.push(`Message-ID: ${oneLine(m.message_id)}`);
   if (m.in_reply_to) headers.push(`In-Reply-To: ${oneLine(m.in_reply_to)}`);
   if (m.references || m.in_reply_to) headers.push(`References: ${oneLine(m.references || m.in_reply_to!)}`);
+  headers.push("MIME-Version: 1.0", 'Content-Type: text/plain; charset="UTF-8"', "Content-Transfer-Encoding: base64");
   const body = Buffer.from(composeText(m.body, m.signature).replace(/\n/g, "\r\n"), "utf8").toString("base64").replace(/.{76}/g, "$&\r\n");
-  return Buffer.from(`${headers.join("\r\n")}\r\n\r\n${body}`, "utf8").toString("base64url");
+  return `${headers.join("\r\n")}\r\n\r\n${body}`;
+}
+
+/** The message as Gmail's `raw` field (base64url). */
+export function buildRaw(m: Outgoing): string {
+  return Buffer.from(buildMime(m), "utf8").toString("base64url");
 }
 
 // ---------- reading Gmail messages ----------
@@ -69,7 +76,7 @@ export function addresses(value: string | null | undefined): string[] {
 }
 
 const decode = (data?: string) => (data ? Buffer.from(data, "base64url").toString("utf8") : "");
-const htmlToText = (html: string) =>
+export const htmlToText = (html: string) =>
   html.replace(/<(style|script)[\s\S]*?<\/\1>/gi, "").replace(/<br\s*\/?>|<\/(p|div|li|tr)>/gi, "\n").replace(/<[^>]+>/g, "")
     .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
 
@@ -115,35 +122,68 @@ export type SyncMessage = {
   rfc_id: string | null; in_reply_to: string | null; snippet: string; body: string; unsubscribe: boolean; bounced_to: string | null;
 };
 
-export function classify(msg: GmailMessage, mailbox: string): SyncKind {
-  const from = addresses(header(msg, "From"))[0] ?? "";
-  if (from === mailbox.toLowerCase() || msg.labelIds?.includes("SENT")) return "sent";
-  const subject = header(msg, "Subject") ?? "";
-  if (/^(mailer-daemon|postmaster)@/i.test(from) || header(msg, "X-Failed-Recipients")) return "bounce";
-  const auto = (header(msg, "Auto-Submitted") ?? "no").toLowerCase();
-  if ((auto && auto !== "no") || header(msg, "X-Autoreply") || header(msg, "X-Autorespond")
+type HeaderGet = (name: string) => string | null;
+
+export function classifyBy(get: HeaderGet, mailbox: string, inSentFolder = false): SyncKind {
+  const from = addresses(get("From"))[0] ?? "";
+  if (from === mailbox.toLowerCase() || inSentFolder) return "sent";
+  const subject = get("Subject") ?? "";
+  if (/^(mailer-daemon|postmaster)@/i.test(from) || get("X-Failed-Recipients")) return "bounce";
+  const auto = (get("Auto-Submitted") ?? "no").toLowerCase();
+  if ((auto && auto !== "no") || get("X-Autoreply") || get("X-Autorespond")
       || /^(automatic reply|auto[- ]?reply|autoreply|out of (the )?office|ooo\b)/i.test(subject)) return "auto_reply";
   return "reply";
 }
 
-/** A full Gmail message, reduced to what the database stores. */
-export function toSyncMessage(msg: GmailMessage, mailbox: string): SyncMessage {
-  const kind = classify(msg, mailbox);
-  const text = bodyText(msg.payload);
-  const reply = kind === "reply" || kind === "auto_reply" ? stripQuoted(text) : text;
+export function classify(msg: GmailMessage, mailbox: string): SyncKind {
+  return classifyBy((n) => header(msg, n), mailbox, !!msg.labelIds?.includes("SENT"));
+}
+
+/** Who a bounce was for: X-Failed-Recipients, else the delivery report's Final-Recipient. */
+function bouncedTo(get: HeaderGet, text: string) {
+  return addresses(get("X-Failed-Recipients"))[0]
+    ?? addresses(text.match(/(?:Final|Original)-Recipient:\s*rfc822;\s*(\S+)/i)?.[1])[0]
+    ?? null;
+}
+
+/** Any synced message, reduced to what the database stores. */
+export function syncFrom(p: {
+  id: string; thread_id: string; get: HeaderGet; text: string; date: Date; snippet?: string; mailbox: string; inSentFolder?: boolean;
+}): SyncMessage {
+  const kind = classifyBy(p.get, p.mailbox, p.inSentFolder);
+  const reply = kind === "reply" || kind === "auto_reply" ? stripQuoted(p.text) : p.text;
   return {
-    id: msg.id,
-    thread_id: msg.threadId,
+    id: p.id,
+    thread_id: p.thread_id,
     kind,
-    from: addresses(header(msg, "From"))[0] ?? "",
-    to: [...addresses(header(msg, "To")), ...addresses(header(msg, "Cc"))],
-    subject: header(msg, "Subject"),
-    date: new Date(Number(msg.internalDate ?? Date.now())).toISOString(),
-    rfc_id: header(msg, "Message-ID") ?? header(msg, "Message-Id"),
-    in_reply_to: header(msg, "In-Reply-To"),
-    snippet: (msg.snippet ?? "").slice(0, 300),
+    from: addresses(p.get("From"))[0] ?? "",
+    to: [...addresses(p.get("To")), ...addresses(p.get("Cc"))],
+    subject: p.get("Subject"),
+    date: p.date.toISOString(),
+    rfc_id: p.get("Message-ID") ?? p.get("Message-Id"),
+    in_reply_to: p.get("In-Reply-To"),
+    snippet: (p.snippet ?? reply.replace(/\s+/g, " ")).slice(0, 300),
     body: reply.slice(0, 20000),
     unsubscribe: kind === "reply" && isOptOut(reply),
-    bounced_to: kind === "bounce" ? addresses(header(msg, "X-Failed-Recipients"))[0] ?? null : null,
+    bounced_to: kind === "bounce" ? bouncedTo(p.get, p.text) : null,
   };
+}
+
+/** A full Gmail message, reduced to what the database stores. */
+export function toSyncMessage(msg: GmailMessage, mailbox: string): SyncMessage {
+  return syncFrom({
+    id: msg.id, thread_id: msg.threadId, get: (n) => header(msg, n), text: bodyText(msg.payload),
+    date: new Date(Number(msg.internalDate ?? Date.now())), snippet: msg.snippet ?? "", mailbox,
+    inSentFolder: !!msg.labelIds?.includes("SENT"),
+  });
+}
+
+/**
+ * IMAP has no thread ids, so a conversation is named after its first message: the first
+ * id in References, else In-Reply-To, else the message's own Message-ID.
+ */
+export function imapThreadId(messageId: string | null | undefined, inReplyTo?: string | null, references?: string | string[] | null) {
+  const refs = (Array.isArray(references) ? references.join(" ") : references ?? "").match(/<[^<>\s]+>/g) ?? [];
+  const root = refs[0] ?? inReplyTo?.match(/<[^<>\s]+>/)?.[0] ?? messageId?.trim();
+  return root ? `rfc:${root}` : null;
 }

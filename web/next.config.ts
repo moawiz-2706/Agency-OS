@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Mail libraries open raw TCP/TLS sockets: load them from node_modules instead of bundling.
+  serverExternalPackages: ["imapflow", "nodemailer", "mailparser"],
 };
 
 export default nextConfig;

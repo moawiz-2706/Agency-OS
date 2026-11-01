@@ -17,10 +17,10 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
   const supabase = await supabaseServer();
   const [{ data: { user } }, mailRes, sendingRes] = await Promise.all([
     supabase.auth.getUser(),
-    supabase.rpc("my_mail_account"),
+    supabase.rpc("my_mail_accounts"),
     supabase.rpc("sending_enabled"),
   ]);
-  const mailAccount = ((mailRes.data as MailAccountRow[] | null) ?? [])[0] ?? null;
+  const mailAccounts = (mailRes.data as MailAccountRow[] | null) ?? [];
   const providers = new Set((user?.identities ?? []).map((i) => i.provider));
 
   return (
@@ -28,7 +28,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
       <PageHeader title="Account" description={`${memberName(member)} · ${user?.email ?? ""}`} />
 
       <div className="grid max-w-3xl gap-6">
-        <MailAccountCard account={mailAccount} sendingEnabled={sendingRes.data === true} isOwner={member?.role === "owner"}
+        <MailAccountCard accounts={mailAccounts}sendingEnabled={sendingRes.data === true} isOwner={member?.role === "owner"}
           status={mail} reason={reason} fallbackName={memberName(member)} />
 
         <Card>
