@@ -32,7 +32,7 @@ audit, research and offer recommendations, a team CRM, and email outreach with r
 | `supabase/migrations` | SQL migrations `0001`–`0007`, all **applied on live** |
 | `supabase/test` | Database tests on PGlite (real Postgres in WASM) with Supabase auth stand-ins (`harness.mjs`) |
 | `web/` | Standalone **npm** Next.js 16 app (not part of the pnpm workspace): React 19, Tailwind v4, shadcn/ui, `@supabase/ssr`. Deployed on Vercel from `main` (root dir `web`) |
-| `docs/GO-LIVE.md`, `docs/GMAIL.md` | Setup guides (database, auth, deploy; email inboxes) |
+| `docs/GO-LIVE.md`, `docs/GMAIL.md`, `docs/WEB-FORM.md` | Setup guides (database, auth, deploy; email inboxes; website form embed) |
 | `docs/research/` | External-AI research workflow: prompt, CSV template, how to import |
 | `data/` (gitignored) | Lead CSVs, research results, outreach sequences/plans. Not in git: copy it separately |
 
@@ -112,18 +112,59 @@ and excludes `*.test.ts`.
   page), per-inbox daily limit, 2-minute gap, suppression/do-not-contact/bounced/consent (CASL for Canada),
   signature (postal address) required, opt-out line auto-added, never sends a fake "Re:" when the first email
   isn't synced.
+- **Unsubscribe and bounce guard (`0008`):** outreach sends carry `List-Unsubscribe` + one-click POST
+  (`/api/unsubscribe`, signed per address with a key derived from `MAIL_TOKEN_KEY`, `lib/mail/unsubscribe.ts`);
+  people who open the link get `/unsubscribe` with a confirm button. `mailer_unsubscribe` suppresses the address,
+  marks contacts do-not-contact, cancels pending email. A trigger on `inbound_messages` switches sending off
+  when 2+ bounces in 24 h exceed 3% of sends (`settings.sending_paused`, shown on Account; turning sending on clears it).
 - **Sync** stores only messages to/from contacts: sends made in the inbox itself → touch + "contacted";
   replies → "replied" + stop pending follow-ups; "no"/"unsubscribe" → suppression + do-not-contact;
   bounces → email marked bounced; out-of-office → recorded, doesn't stop anything.
 - IMAP threads are named after the first Message-ID (`rfc:<id>`); bounces are matched through the original
   headers quoted in the delivery report.
-- **Mailbox page** (`/mailbox`): the member's own IMAP inbox/Sent read **live** (read-only, BODY.PEEK,
-  nothing stored), HTML shown as text, lead senders linked.
+- **Mailbox page** (`/mailbox`): a full mail client for the member's own IMAP inboxes, read **live** from
+  the server (nothing stored in the DB). Folders (Inbox, Sent, Drafts, Archive, Spam, Trash), search, opening
+  marks read, star / unread / archive / delete (= move to Trash, never permanent), attachment downloads
+  (`/api/mailbox/attachment`, always a download). HTML email shows in a sandboxed iframe with a strict CSP;
+  remote images stay hidden until "Show images". Compose / reply / reply all / forward with attachments (≤4 MB)
+  sends **straight away** over SMTP and files a copy in Sent (`sendDirect`). The kill switch and daily limit
+  govern scheduled outreach only; hand-written mail still obeys the never-contact list, do-not-contact,
+  bounces and (for new emails to non-won leads) consent/CASL, adds the opt-out line then, max 20 recipients
+  (`lib/mail/compose.ts`). Mail to a lead is logged by the sync, which runs right after the send.
+  Lead contacts have a "Write now" link into the composer. **Schedule send** (`0009`, `scheduled_mail`, no
+  attachments): the final text is stored at scheduling time; the worker sends due ones per inbox
+  (`mailer_claim_scheduled` re-checks the never-contact list) and the Mailbox has a Scheduled view. Gmail inboxes aren't in the Mailbox yet.
 - Vercel env (names only): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `MAIL_TOKEN_KEY`,
   `MAILER_SECRET`, `CRON_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, optional `APP_URL`,
   `NEXT_PUBLIC_TEAM_TIME_ZONE` (default `Asia/Karachi`). **Account → Email inboxes → Setup check** shows
   which are missing/wrong without revealing values. Don't change `MAIL_TOKEN_KEY` (stored secrets would
   stop decrypting).
+
+### Tasks, deals, reply labels (`0012`)
+- `tasks` (optional lead, assignee, due, done; team RLS, delete = creator or owner). `/tasks` lists mine/everyone by
+  overdue / today / coming up / no date, and includes leads whose `next_step_at` is within a week (ticking clears it).
+  Lead page: Tasks card + Deal card (the Status card no longer edits deal value).
+- `deals`: one per lead (`deals_company_uq`), offer key, setup + monthly fee, stage open/proposal_sent/won/lost.
+  `saveDeal` mirrors first-year value into `companies.deal_value_cents` and moves the lead to proposal_sent/won/lost.
+- `classify_reply(id, label)`: interested/meeting_request -> stage interested + task "Send X the booking link";
+  question/pricing -> at least replied; not_now -> nurture, stop pending, task in 60 days; not_interested -> lost;
+  unsubscribe -> suppress. Inbox shows label buttons with a suggestion (`lib/replies.ts`, keyword rules) and a
+  suggested answer using `booking_url()` (owner sets it on Account).
+### Website form (`0011`, `docs/WEB-FORM.md`)
+- Public `POST /api/forms/contact` (CORS: `FORM_ORIGINS`, default the main domain + www) and an embeddable
+  `/forms/contact` page (iframe, always light, posts its height to the parent). `lib/forms.ts` traps bots (hidden
+  `company_url`, <3 s) and answers them "ok". `web_form_submit` (worker secret) rate-limits per IP hash (5/h, 200/day),
+  joins a lead by email then website domain or creates one (`source web_form`, stage interested), sets the contact
+  to `express` consent, pins a note and adds an unhandled "Website enquiry" to the Inbox.
+### Sequences (`0010`)
+- A sequence = a `campaigns` row; steps = `templates` rows in `template_ids` order, days in `step_days`, sent at
+  `send_time` in each lead's time zone, moved off weekends. `/sequences` + `/sequences/[id]` (steps editor with merge
+  fields + preview, add leads by filter, approve all, pause/resume, remove a lead); Leads table bulk action "Add to sequence".
+- `enroll_in_sequence` picks each lead's best emailable contact (named person before shared inbox, `outreach_block_reason`
+  clear), skips closed leads / already enrolled / already has emails waiting, and inserts `pending_approval` drafts from the
+  enrolling member (later steps with no subject become `Re: <step 1 subject>` so they thread). `merge_template` fills
+  `{{first_name}} {{full_name}} {{company}} {{city}} {{trade}} {{website}} {{personal_line}}` (research hook) `{{my_name}}`;
+  `lib/sequences.ts` mirrors it for previews and rejects unknown tags. Pausing sends approved emails back to approval.
 
 ### Web app
 - `/reports` (no migration; reads through RLS, `lib/reports.ts`): funnel (how far each lead got; lost/nurture count
@@ -141,7 +182,7 @@ and excludes `*.test.ts`.
 
 ## Live state (as of 2026-11-01)
 
-- Live: migrations 0001–0007, PRs #1–#13 merged and deployed. PR #14 closed (rejected).
+- Live: migrations 0001–0007 (0008+ are in open PRs until the owner runs them), PRs #1–#13 merged and deployed. PR #14 closed (rejected).
 - ~1,015 leads: 1,000 imported from CSV (101 with external-AI research reports) + 15 `MANUS-*` GHL leads
   (all owned by Moawiz) with research, verified contacts and owner names.
 - Connected inboxes: both GoDaddy mailboxes, with signatures. **Moawiz's personal Gmail is not connected yet.**
@@ -171,6 +212,6 @@ and excludes `*.test.ts`.
   host"): just retry.
 - Next.js 16: `proxy.ts` replaces `middleware.ts`; route files may only export route handlers/config (put
   shared constants in `lib/`); layouts can't export arbitrary values either.
-- Tests: `pnpm test:db` (PGlite, 31 tests), `cd web && npm test` (7 tests). Add a test with each behaviour change.
+- Tests: `pnpm test:db` (PGlite) and `cd web && npm test` (`node --test`). Add a test with each behaviour change.
 - External-AI research CSVs often have wrong column counts; `import-research` realigns gap-column slips and
   rejects the rest. Always dry-run first.

@@ -46,7 +46,10 @@ function FilterSelect({ name, value, placeholder, children }: { name: string; va
 export default async function LeadsPage({ searchParams }: { searchParams: Promise<Params> }) {
   const p = await searchParams;
   const supabase = await supabaseServer();
-  const [team, facetsRes] = await Promise.all([teamMembers(), supabase.from("v_lead_facets").select("region,trade,leads")]);
+  const [team, facetsRes, seqRes] = await Promise.all([
+    teamMembers(), supabase.from("v_lead_facets").select("region,trade,leads"),
+    supabase.from("campaigns").select("id,name").neq("status", "paused").order("created_at", { ascending: false }),
+  ]);
   const facets = (facetsRes.data ?? []) as { region: string | null; trade: string | null; leads: number }[];
   const regions = [...new Set(facets.map((f) => f.region).filter(Boolean))].sort() as string[];
   const trades = [...new Set(facets.map((f) => f.trade).filter(Boolean))].sort() as string[];
@@ -151,7 +154,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
       </Card>
 
       {error && <p className="text-sm text-destructive">{error.message}</p>}
-      <LeadsTable rows={rows} team={team} />
+      <LeadsTable rows={rows} team={team} sequences={(seqRes.data ?? []) as { id: string; name: string }[]} />
 
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <span>
