@@ -126,7 +126,9 @@ and excludes `*.test.ts`.
   govern scheduled outreach only; hand-written mail still obeys the never-contact list, do-not-contact,
   bounces and (for new emails to non-won leads) consent/CASL, adds the opt-out line then, max 20 recipients
   (`lib/mail/compose.ts`). Mail to a lead is logged by the sync, which runs right after the send.
-  Lead contacts have a "Write now" link into the composer. Gmail inboxes aren't in the Mailbox yet.
+  Lead contacts have a "Write now" link into the composer. **Schedule send** (`0009`, `scheduled_mail`, no
+  attachments): the final text is stored at scheduling time; the worker sends due ones per inbox
+  (`mailer_claim_scheduled` re-checks the never-contact list) and the Mailbox has a Scheduled view. Gmail inboxes aren't in the Mailbox yet.
 - Vercel env (names only): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `MAIL_TOKEN_KEY`,
   `MAILER_SECRET`, `CRON_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, optional `APP_URL`,
   `NEXT_PUBLIC_TEAM_TIME_ZONE` (default `Asia/Karachi`). **Account → Email inboxes → Setup check** shows
@@ -176,6 +178,6 @@ and excludes `*.test.ts`.
   host"): just retry.
 - Next.js 16: `proxy.ts` replaces `middleware.ts`; route files may only export route handlers/config (put
   shared constants in `lib/`); layouts can't export arbitrary values either.
-- Tests: `pnpm test:db` (PGlite, 31 tests), `cd web && npm test` (13 tests). Add a test with each behaviour change.
+- Tests: `pnpm test:db` (PGlite, 34 tests), `cd web && npm test` (13 tests). Add a test with each behaviour change.
 - External-AI research CSVs often have wrong column counts; `import-research` realigns gap-column slips and
   rejects the rest. Always dry-run first.

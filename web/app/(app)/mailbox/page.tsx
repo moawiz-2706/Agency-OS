@@ -1,16 +1,16 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import {
-  AlertTriangle, Archive, ArrowLeft, ChevronLeft, ChevronRight, CornerUpLeft, ExternalLink, FileText, ImageOff, Inbox,
+  AlertTriangle, Archive, ArrowLeft, CalendarClock, ChevronLeft, ChevronRight, CornerUpLeft, ExternalLink, FileText, ImageOff, Inbox,
   Paperclip, PenSquare, RefreshCw, Search, Send, ShieldAlert, Star, Trash2, X,
 } from "lucide-react";
 import { supabaseServer } from "@/lib/supabase/server";
 import { currentMember } from "@/lib/team";
-import { TEAM_TZ, ago } from "@/lib/format";
+import { TEAM_TZ, ago, isoToTeamLocal } from "@/lib/format";
 import { myImapInboxes } from "@/lib/mail/worker";
 import { FOLDERS, FOLDER_LABEL, loadMailbox, webmailUrl, type Folder, type MailboxView } from "@/lib/mail/mailbox";
 import { emailDocument, forwardBlock, forwardSubject, hasRemoteImages, quoteReply, replyRecipients, replySubject } from "@/lib/mail/compose";
-import { ComposeForm, EmailFrame, MessageActions, type ComposeMode } from "@/components/mailbox";
+import { CancelScheduled, ComposeForm, EmailFrame, MessageActions, type ComposeMode } from "@/components/mailbox";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,7 +25,8 @@ export const maxDuration = 30;
 const PAGE = 25;
 const FOLDER_ICON = { inbox: Inbox, sent: Send, drafts: FileText, archive: Archive, junk: ShieldAlert, trash: Trash2 } as const;
 type Lead = { company_id: string; name: string };
-type Params = { inbox?: string; folder?: string; page?: string; uid?: string; q?: string; compose?: string; to?: string; images?: string };
+type Params = { inbox?: string; folder?: string; page?: string; uid?: string; q?: string; compose?: string; to?: string; images?: string; scheduled?: string };
+type Scheduled = { id: string; to_addrs: string[]; cc_addrs: string[]; subject: string; body: string; send_at: string; status: string; error: string | null; sent_at: string | null };
 
 function when(iso: string | null) {
   if (!iso) return "";
@@ -60,9 +61,10 @@ export default async function MailboxPage({ searchParams }: { searchParams: Prom
   const q = sp.q?.trim().slice(0, 100) || null;
   const compose = (["new", "reply", "replyall", "forward"] as const).find((m) => m === sp.compose) ?? null;
   const images = sp.images === "1";
+  const scheduledView = sp.scheduled === "1";
 
   const href = (p: Partial<Record<keyof Params, string | number | null>>) => {
-    const base: Record<string, string | number | null> = { inbox: inbox.id, folder, page, q, uid, compose: null, images: null };
+    const base: Record<string, string | number | null> = { inbox: inbox.id, folder, page, q, uid, compose: null, images: null, scheduled: scheduledView ? "1" : null };
     const query = new URLSearchParams();
     for (const [k, v] of Object.entries({ ...base, ...p })) {
       if (v === null || v === undefined || v === "" || (k === "page" && v === 0) || (k === "folder" && v === "inbox")) continue;
@@ -87,10 +89,13 @@ export default async function MailboxPage({ searchParams }: { searchParams: Prom
   const addrs = [...new Set([...view.items.flatMap((m) => [m.from, ...m.to]), ...(message?.addresses ?? []), sp.to?.toLowerCase() ?? ""])]
     .filter((a) => a && a !== inbox.email);
   const leads = new Map<string, Lead>();
-  const [contactsRes, accountsRes] = await Promise.all([
+  const [contactsRes, accountsRes, scheduledRes] = await Promise.all([
     addrs.length ? supabase.from("contacts").select("email,company_id,companies(name)").in("email", addrs.slice(0, 300)) : null,
     compose ? supabase.rpc("my_mail_accounts") : null,
+    supabase.rpc("my_scheduled_mail", { p_account: inbox.id }),   // missing until migration 0009 runs
   ]);
+  const scheduled = (scheduledRes.data ?? []) as Scheduled[];
+  const waiting = scheduled.filter((m) => m.status === "scheduled" || m.status === "sending").length;
   for (const c of (contactsRes?.data ?? []) as unknown as { email: string; company_id: string; companies: { name: string } | null }[]) {
     leads.set(c.email.toLowerCase(), { company_id: c.company_id, name: c.companies?.name ?? "Lead" });
   }
@@ -117,6 +122,9 @@ export default async function MailboxPage({ searchParams }: { searchParams: Prom
       quoted: !message || mode === "new" ? null : mode === "forward" ? forwardBlock(message, TEAM_TZ) : quoteReply(message, TEAM_TZ),
       hasFiles: !!message?.attachments.length,
       hasSignature: !!signature?.trim(),
+      scheduledHref: href({ scheduled: "1", uid: null, compose: null, q: null, page: 0 }),
+      tz: TEAM_TZ,
+      minLocal: isoToTeamLocal(new Date().toISOString()),
       done: href({ folder: mode === "new" ? "sent" : folder, uid: mode === "new" ? null : uid, page: mode === "new" ? 0 : page, q: mode === "new" ? null : q }),
       cancel: href({ compose: null }),
     };
@@ -148,16 +156,57 @@ export default async function MailboxPage({ searchParams }: { searchParams: Prom
             const Icon = FOLDER_ICON[f];
             return (
               <Button key={f} asChild size="sm" variant={f === folder ? "secondary" : "ghost"} className="shrink-0 justify-start">
-                <Link href={href({ folder: f, page: 0, uid: null, q: null })}>
+                <Link href={href({ folder: f, page: 0, uid: null, q: null, scheduled: null })}>
                   <Icon />{FOLDER_LABEL[f]}
                   {f === "inbox" && view.unread > 0 && <span className="ml-auto rounded-full bg-primary px-1.5 text-[11px] font-semibold text-primary-foreground">{view.unread}</span>}
                 </Link>
               </Button>
             );
           })}
+          <Button asChild size="sm" variant={scheduledView ? "secondary" : "ghost"} className="shrink-0 justify-start">
+            <Link href={href({ scheduled: "1", uid: null, q: null, page: 0, compose: null })}>
+              <CalendarClock />Scheduled
+              {waiting > 0 && <span className="ml-auto rounded-full bg-muted px-1.5 text-[11px] font-semibold">{waiting}</span>}
+            </Link>
+          </Button>
         </nav>
 
         <div className={cn("grid min-w-0 gap-4", paneOpen && "xl:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]")}>
+          {scheduledView ? (
+            <Card className={cn("min-w-0 gap-0 overflow-hidden py-0", paneOpen && "hidden xl:block")}>
+              <div className="border-b px-4 py-3 text-sm font-medium">Scheduled emails · {inbox.email}</div>
+              {scheduledRes.error ? (
+                <p className="p-4 text-sm text-muted-foreground">Scheduling needs migration 0009: run it in Supabase, then this list appears.</p>
+              ) : scheduled.length === 0 ? (
+                <p className="py-10 text-center text-sm text-muted-foreground">Nothing scheduled. Use “Schedule send” when writing an email.</p>
+              ) : (
+                <ul className="divide-y">
+                  {scheduled.map((m) => (
+                    <li key={m.id} className="space-y-1.5 px-4 py-3 text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate font-medium">To: {m.to_addrs.join(", ")}</span>
+                        <Badge variant="outline" className={cn("font-normal",
+                          m.status === "failed" && "border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300",
+                          m.status === "sent" && "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300")}>
+                          {m.status === "scheduled" ? "Waiting" : m.status === "sending" ? "Sending" : m.status === "sent" ? "Sent" : "Failed"}
+                        </Badge>
+                      </div>
+                      <div className="truncate text-muted-foreground">{m.subject}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {m.status === "sent" && m.sent_at ? `Sent ${new Date(m.sent_at).toLocaleString("en-GB", { timeZone: TEAM_TZ, dateStyle: "medium", timeStyle: "short" })}`
+                          : `Goes out ${new Date(m.send_at).toLocaleString("en-GB", { timeZone: TEAM_TZ, dateStyle: "medium", timeStyle: "short" })} (${TEAM_TZ.replace(/_/g, " ")})`}
+                      </div>
+                      {m.error && <p className="text-xs text-red-600 dark:text-red-400">{m.error}</p>}
+                      <details className="text-xs"><summary className="cursor-pointer text-muted-foreground">Show message</summary>
+                        <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words font-sans">{m.body}</pre>
+                      </details>
+                      {(m.status === "scheduled" || m.status === "failed") && <CancelScheduled id={m.id} />}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
+          ) : (
           <Card className={cn("min-w-0 gap-0 overflow-hidden py-0", paneOpen && "hidden xl:block")}>
             <form action="/mailbox" className="flex items-center gap-2 border-b p-2">
               {inboxes.length > 1 && <input type="hidden" name="inbox" value={inbox.id} />}
@@ -206,6 +255,7 @@ export default async function MailboxPage({ searchParams }: { searchParams: Prom
               </div>
             )}
           </Card>
+          )}
 
           {composeProps && (
             <Card className="min-w-0 py-0">

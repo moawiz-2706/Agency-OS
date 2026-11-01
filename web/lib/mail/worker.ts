@@ -4,7 +4,7 @@ import type { ImapFlow } from "imapflow";
 import { decryptToken } from "./crypto.ts";
 import { envValue } from "./env.ts";
 import { GoogleAuthError, accessToken, getMessage, listMessageIds, revokeToken, sendRaw } from "./google.ts";
-import { MailAuthError, openImap, sendImap, syncImap, type Brief, type ImapSettings } from "./imap.ts";
+import { MailAuthError, openImap, sendDirect, sendImap, syncImap, type Brief, type ImapSettings } from "./imap.ts";
 import { addresses, buildRaw, header, toSyncMessage, type SyncMessage } from "./message.ts";
 
 // One run for each connected inbox: sync it (your own sends, replies, bounces) into the
@@ -25,7 +25,8 @@ type Claim = {
   in_reply_to: string | null; references: string | null; from_email: string; from_name: string | null; signature: string;
 };
 type Sent = { id: string; threadId: string; rfcId: string | null };
-export type MailRunReport = { email: string; synced?: Record<string, number>; sent?: string | null; error?: string };
+export type MailRunReport = { email: string; synced?: Record<string, number>; sent?: string | null; scheduled?: number; error?: string };
+type ScheduledClaim = { id: string; to: string[]; cc: string[]; bcc: string[]; subject: string; body: string; in_reply_to: string | null; references: string | null };
 type Rpc = <T>(fn: string, args: Record<string, unknown>) => Promise<T>;
 
 function workerDb(): Rpc {
@@ -128,6 +129,35 @@ async function runImap(rpc: Rpc, a: Account, send: boolean, report: MailRunRepor
   } finally {
     await c?.logout().catch(() => {});
   }
+  if (send) report.scheduled = await sendScheduled(rpc, a, s);
+}
+
+/** Email scheduled in the Mailbox: a few per run, from the inbox it was written in. */
+async function sendScheduled(rpc: Rpc, a: Account, s: ImapSettings) {
+  let sent = 0;
+  for (let i = 0; i < 5; i++) {
+    let m: ScheduledClaim | null;
+    try {
+      m = await rpc<ScheduledClaim | null>("mailer_claim_scheduled", { p_account: a.id });
+    } catch (e) {
+      // Migration 0009 not run yet: nothing can be scheduled, so carry on as before.
+      if (/mailer_claim_scheduled.*(schema cache|does not exist)|Could not find the function/i.test(String(e))) return 0;
+      throw e;
+    }
+    if (!m) break;
+    try {
+      await sendDirect(s, {
+        from_name: a.from_name, to: m.to, cc: m.cc, bcc: m.bcc, subject: m.subject, text: m.body,
+        in_reply_to: m.in_reply_to, references: m.references, attachments: [],
+      });
+      await rpc("mailer_scheduled_result", { p_id: m.id, p_ok: true, p_error: null });
+      sent++;
+    } catch (e) {
+      await rpc("mailer_scheduled_result", { p_id: m.id, p_ok: false, p_error: e instanceof Error ? e.message : String(e) });
+      if (e instanceof MailAuthError) throw e;
+    }
+  }
+  return sent;
 }
 
 // ---------- Gmail ----------

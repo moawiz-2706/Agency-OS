@@ -4,9 +4,9 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  Archive, Forward, Inbox, Loader2, MailOpen, Paperclip, Reply, ReplyAll, Send, ShieldCheck, Star, Trash2, X,
+  Archive, CalendarClock, Forward, Inbox, Loader2, MailOpen, Paperclip, Reply, ReplyAll, Send, ShieldCheck, Star, Trash2, X,
 } from "lucide-react";
-import { flagMessage, moveTo, sendFromMailbox } from "@/app/(app)/mailbox/actions";
+import { cancelScheduled, flagMessage, moveTo, sendFromMailbox } from "@/app/(app)/mailbox/actions";
 import type { FlagOp, Folder } from "@/lib/mail/mailbox";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -18,7 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 export type ComposeMode = "new" | "reply" | "replyall" | "forward";
 
 /** Write, reply or forward. Sends straight away from the chosen inbox, then goes to `done`. */
-export function ComposeForm({ inboxes, inboxId, mode, src, defaults, quoted, hasFiles, hasSignature, done, cancel }: {
+export function ComposeForm({ inboxes, inboxId, mode, src, defaults, quoted, hasFiles, hasSignature, done, scheduledHref, cancel, tz, minLocal }: {
   inboxes: { id: string; email: string }[];
   inboxId: string;
   mode: ComposeMode;
@@ -28,12 +28,17 @@ export function ComposeForm({ inboxes, inboxId, mode, src, defaults, quoted, has
   hasFiles: boolean;
   hasSignature: boolean;
   done: string;
+  scheduledHref: string;
   cancel: string;
+  /** The team's time zone, and "now" in it for the date picker. */
+  tz: string;
+  minLocal: string;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [showCc, setShowCc] = useState(!!defaults.cc);
   const [files, setFiles] = useState<File[]>([]);
+  const [scheduling, setScheduling] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const total = files.reduce((t, f) => t + f.size, 0);
 
@@ -43,11 +48,12 @@ export function ComposeForm({ inboxes, inboxId, mode, src, defaults, quoted, has
       action={(form) => {
         form.delete("files");
         for (const f of files) form.append("files", f);
+        if (!scheduling) form.delete("send_at");
         start(async () => {
           const res = await sendFromMailbox(form);
           if (!res.ok) { toast.error(res.error); return; }
           toast.success(res.message ?? "Sent");
-          router.push(done);
+          router.push(scheduling ? scheduledHref : done);
         });
       }}
     >
@@ -128,12 +134,25 @@ export function ComposeForm({ inboxes, inboxId, mode, src, defaults, quoted, has
 
       <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
         <ShieldCheck className="mt-0.5 size-3.5 shrink-0" />
-        Sends right away from your inbox and files a copy in Sent. Leads on the never-contact list or without a consent basis are
+        Sends from your inbox (now, or at the time you schedule) and files a copy in Sent. Leads on the never-contact list or without a consent basis are
         blocked; a new email to a lead gets the opt-out line and is logged on the lead.
       </p>
 
-      <div className="flex gap-2">
-        <Button type="submit" disabled={pending || total > 4 * 1024 * 1024}>{pending ? <Loader2 className="animate-spin" /> : <Send />}Send</Button>
+      {scheduling && (
+        <div className="grid gap-1.5 sm:max-w-xs">
+          <Label htmlFor="send_at">Send at ({tz.replace(/_/g, " ")} time)</Label>
+          <Input id="send_at" name="send_at" type="datetime-local" min={minLocal} required />
+          {files.length > 0 && <span className="text-xs text-red-600">Scheduled emails can&apos;t carry attachments yet.</span>}
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" disabled={pending || total > 4 * 1024 * 1024 || (scheduling && files.length > 0)}>
+          {pending ? <Loader2 className="animate-spin" /> : scheduling ? <CalendarClock /> : <Send />}{scheduling ? "Schedule" : "Send"}
+        </Button>
+        <Button type="button" variant="outline" disabled={pending} onClick={() => setScheduling((v) => !v)}>
+          {scheduling ? <><Send />Send now instead</> : <><CalendarClock />Schedule send</>}
+        </Button>
         <Button type="button" variant="ghost" disabled={pending} onClick={() => router.push(cancel)}>Discard</Button>
       </div>
     </form>
@@ -190,5 +209,19 @@ export function EmailFrame({ doc, title }: { doc: string; title: string }) {
       referrerPolicy="no-referrer"
       className="h-[65vh] w-full rounded-md border bg-white"
     />
+  );
+}
+
+/** Cancel one email that's waiting to be sent. */
+export function CancelScheduled({ id }: { id: string }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  return (
+    <Button size="sm" variant="outline" disabled={pending} onClick={() => start(async () => {
+      const res = await cancelScheduled(id);
+      if (!res.ok) toast.error(res.error); else { toast.success(res.message ?? "Cancelled"); router.refresh(); }
+    })}>
+      {pending ? <Loader2 className="animate-spin" /> : <X />}Cancel
+    </Button>
   );
 }
