@@ -7,7 +7,7 @@ import { CornerDownRight } from "lucide-react";
 import { supabaseServer } from "@/lib/supabase/server";
 import { currentMember } from "@/lib/team";
 import { TEAM_TZ, ago, dateTime } from "@/lib/format";
-import { markReplyHandled } from "../mail-actions";
+import { approveAllMine, markReplyHandled } from "../mail-actions";
 import { PageHeader } from "@/components/page-header";
 import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/submit-button";
@@ -78,7 +78,12 @@ export default async function InboxPage() {
 
         {[["Waiting for your approval", toApprove], ["Failed: check and retry", failed]].map(([title, list]) => (list as Pending[]).length > 0 && (
           <Card key={title as string}>
-            <CardHeader><CardTitle>{title as string} ({(list as Pending[]).length})</CardTitle></CardHeader>
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
+              <CardTitle>{title as string} ({(list as Pending[]).length})</CardTitle>
+              {list === toApprove && toApprove.length > 1 && (
+                <ActionForm action={approveAllMine}><SubmitButton size="sm">Approve all {toApprove.length}</SubmitButton></ActionForm>
+              )}
+            </CardHeader>
             <CardContent>
               <ul className="divide-y">
                 {(list as Pending[]).map((p) => (

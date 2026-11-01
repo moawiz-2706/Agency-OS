@@ -107,6 +107,25 @@ export async function approveAllForLead(companyId: string): Promise<ActionResult
   });
 }
 
+/** Approve every email of mine that's waiting (each still goes through approve_email's checks). */
+export async function approveAllMine(): Promise<ActionResult> {
+  return attempt(async () => {
+    const supabase = await supabaseServer();
+    const { data, error } = await supabase.from("outreach_messages").select("id")
+      .eq("member_id", (await me()).id).eq("status", "pending_approval").order("scheduled_for").limit(1000);
+    if (error) throw new Error(error.message);
+    let ok = 0;
+    const failed: string[] = [];
+    for (const m of data ?? []) {
+      try { await rpc("approve_email", { p_id: m.id, p_now: false }); ok++; } catch (e) { failed.push(e instanceof Error ? e.message : String(e)); }
+    }
+    revalidatePath("/inbox");
+    revalidatePath("/leads", "layout");
+    return `${ok} email(s) approved: each goes out at its scheduled time while sending is on.`
+      + (failed.length ? ` ${failed.length} couldn't be approved (${[...new Set(failed)].slice(0, 2).join("; ")}).` : "");
+  });
+}
+
 export async function cancelEmail(id: string, companyId: string): Promise<ActionResult> {
   return attempt(async () => {
     await rpc("cancel_email", { p_id: id });

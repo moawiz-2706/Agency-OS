@@ -166,6 +166,15 @@ and excludes `*.test.ts`.
   `{{first_name}} {{full_name}} {{company}} {{city}} {{trade}} {{website}} {{personal_line}}` (research hook) `{{my_name}}`;
   `lib/sequences.ts` mirrors it for previews and rejects unknown tags. Pausing sends approved emails back to approval.
 
+### AI email drafts (`/leads/ai-emails`, no migration)
+- Leads page button. Step 1 downloads `researched-leads-<date>.csv` (open leads with a research report and an emailable
+  contact, no emails waiting; optionally already-emailed ones) and a prompt (`/api/leads/ai-export?file=prompt`,
+  `buildPrompt` in `lib/ai-emails.ts`) for Claude/ChatGPT/Manus. The AI returns `lead_id,contact_email,step,send_day,subject,body`.
+- Step 2 uploads that CSV: `checkImport` matches rows by lead id / lead_ref / contact email, and skips a whole lead if
+  anything is wrong (placeholders like [Name], no step 1 subject, bad days, emails already waiting). `schedule` puts each
+  step at the lead-local send time off weekends. Import = `queue_email` per email (pending_approval, from my inbox).
+  Inbox has "Approve all". Emailable rules live in `lib/ai-emails-data.ts` (mirror of `outreach_block_reason`).
+
 ### Web app
 - `/reports` (no migration; reads through RLS, `lib/reports.ts`): funnel (how far each lead got; lost/nurture count
   up to touches/replies) overall + by trade + by state, deliverability per inbox and per day (14 days, bounce alarm = the
