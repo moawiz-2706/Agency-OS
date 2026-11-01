@@ -6,7 +6,9 @@ import {
   ShieldAlert, ShieldCheck, Sparkles, UserPlus,
 } from "lucide-react";
 import { supabaseServer } from "@/lib/supabase/server";
-import { teamMembers } from "@/lib/team";
+import { currentMember, teamMembers } from "@/lib/team";
+import { leadTimeZone } from "@/lib/tz";
+import { EmailPanel, type InboundMessage, type MyMailAccount, type OutreachMessage } from "@/components/email-panel";
 import {
   CHANNEL_LABEL, CHANNELS, OUTCOME_LABEL, OUTCOMES, STAGE_LABEL, STAGES, memberName,
   type Channel, type Outcome, type Stage,
@@ -61,7 +63,7 @@ function Field({ label, children, className }: { label: string; children: React.
 export default async function LeadPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await supabaseServer();
-  const [team, companyRes, contactsRes, touchesRes, notesRes, actsRes, auditRes, reportRes] = await Promise.all([
+  const [team, companyRes, contactsRes, touchesRes, notesRes, actsRes, auditRes, reportRes, outRes, inRes, mailRes, { member: me }] = await Promise.all([
     teamMembers(),
     supabase.from("companies").select("*").eq("id", id).maybeSingle(),
     supabase.from("contacts").select("id,full_name,role,email,phone,consent_basis,email_is_role,do_not_contact,source_url").eq("company_id", id).order("created_at"),
@@ -71,6 +73,12 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     supabase.from("website_audits").select("signals,error,fetched_at").eq("company_id", id).order("fetched_at", { ascending: false }).limit(1),
     supabase.from("research_reports").select("id,source,summary,recommended_offer,hook,gaps,discovery_questions,confidence,raw,created_by,created_at,updated_at")
       .eq("company_id", id).order("created_at", { ascending: false }).limit(1),
+    supabase.from("outreach_messages").select("id,contact_id,member_id,step,status,source,subject,body,scheduled_for,sent_at,error,created_at")
+      .eq("company_id", id).order("created_at").limit(100),
+    supabase.from("inbound_messages").select("id,contact_id,from_email,subject,body_text,snippet,received_at,classification,handled")
+      .eq("company_id", id).order("received_at").limit(100),
+    supabase.rpc("my_mail_account"),
+    currentMember(),
   ]);
   const c = companyRes.data as Company | null;
   if (!c) notFound();
@@ -83,7 +91,8 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   const report = reportRes.data?.[0] as Report | undefined;
   const offers = ((c.recommended_offers as RecommendedOffer[] | null) ?? []).filter((o) => isOfferKey(o.key));
   const who = (mid: string | null, fallback = "System") => (mid ? memberName(team.find((m) => m.id === mid)) : fallback);
-  const leadTime = c.time_zone ? localNow(c.time_zone) : null;
+  const leadTz = leadTimeZone(c);
+  const leadTime = localNow(leadTz);
   const nowLocal = isoToTeamLocal(new Date().toISOString());
 
   const enrichment = Object.entries(c.enrichment ?? {}).filter(([, v]) => s(v));
@@ -149,6 +158,9 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
         <div className="min-w-0 space-y-6">
           <WhatToSell offers={offers} researched={report?.recommended_offer ?? null} />
           {report && <ResearchReportCard report={report} by={report.created_by ? who(report.created_by) : null} />}
+          <EmailPanel companyId={c.id} tz={leadTz} contacts={contacts} team={team} meId={me?.id ?? null}
+            messages={(outRes.data ?? []) as OutreachMessage[]} replies={(inRes.data ?? []) as InboundMessage[]}
+            account={((mailRes.data as NonNullable<MyMailAccount>[] | null) ?? [])[0] ?? null} />
           <Card className="border-primary/20 shadow-sm">
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><Handshake className="size-4" />Log activity</CardTitle>

@@ -1,7 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC = ["/login", "/auth/"];
+// /api/mail/tick checks its own secret (pg_cron calls it without a session).
+const PUBLIC = ["/login", "/auth/", "/api/mail/tick"];
 
 /** Refresh the Supabase session on every request and send signed-out visitors to /login. */
 export async function proxy(request: NextRequest) {

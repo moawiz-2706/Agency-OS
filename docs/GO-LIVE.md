@@ -14,7 +14,8 @@ Each one is safe to run again.
 | `supabase/migrations/0002_phase1.sql` | already run |
 | `supabase/migrations/0003_crm.sql` | already run |
 | `supabase/migrations/0004_research.sql` | already run |
-| `supabase/migrations/0005_signup_approval.sql` | **run this now** |
+| `supabase/migrations/0005_signup_approval.sql` | already run |
+| `supabase/migrations/0006_mail.sql` | **run this now**, then follow [GMAIL.md](GMAIL.md) |
 
 Check: **Table Editor** now shows `team_members`, `touches` and `notes`.
 
