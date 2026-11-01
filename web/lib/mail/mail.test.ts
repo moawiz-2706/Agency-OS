@@ -120,3 +120,19 @@ test("GoDaddy (IMAP) messages: replies join our thread, bounces find the failed 
   const b = await imapToSync(bounce, { id: "rfc:<b1@secureserver.net>", mailbox: "moawiz@sentinel.test", inSentFolder: false });
   assert.deepEqual([b.kind, b.bounced_to, b.thread_id], ["bounce", "old@swift.test", "rfc:<a9@sentinel.test>"]);
 });
+
+test("unsubscribe links are signed per address and ride in the List-Unsubscribe header", async () => {
+  const { unsubscribeUrl, verifyUnsubscribe } = await import("./unsubscribe.ts");
+  const url = new URL(unsubscribeUrl("https://app.test/", "Darin@Swift.test", key));
+  assert.equal(url.origin + url.pathname, "https://app.test/api/unsubscribe");
+  const e = url.searchParams.get("e"), t = url.searchParams.get("t");
+  assert.equal(verifyUnsubscribe(e, t, key), "darin@swift.test");
+  const other = Buffer.from("victim@x.test").toString("base64url");
+  assert.equal(verifyUnsubscribe(other, t, key), null);
+  assert.equal(verifyUnsubscribe(e, t, randomBytes(32)), null);
+  assert.equal(verifyUnsubscribe(e, null, key), null);
+
+  const raw = buildRaw({ from_email: "a@b.test", to: "darin@swift.test", subject: "Hi", body: "Hi", unsubscribe_url: url.toString() });
+  const head = Buffer.from(raw, "base64url").toString("utf8").split("\r\n\r\n")[0];
+  assert.match(head, /\r\nList-Unsubscribe: <https:\/\/app\.test\/api\/unsubscribe\?e=[^>]+>\r\nList-Unsubscribe-Post: List-Unsubscribe=One-Click/);
+});
