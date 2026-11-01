@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { KanbanSquare, LayoutDashboard, LogOut, Menu, UserCog, Users } from "lucide-react";
+import { Inbox, KanbanSquare, LayoutDashboard, LogOut, Menu, UserCog, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -12,6 +12,7 @@ const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/leads", label: "Leads", icon: Users },
   { href: "/pipeline", label: "Pipeline", icon: KanbanSquare },
+  { href: "/inbox", label: "Inbox", icon: Inbox },
 ];
 
 type Me = { name: string; email: string; initials: string; color: string; role: string };

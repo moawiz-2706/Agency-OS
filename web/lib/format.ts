@@ -1,3 +1,5 @@
+import { isoToZonedLocal, zonedLocalToIso } from "./tz";
+
 /** Our time zone: every date in the app is shown in it, plus the lead's own on the lead page. */
 export const TEAM_TZ = process.env.NEXT_PUBLIC_TEAM_TIME_ZONE || "Asia/Karachi";
 
@@ -73,30 +75,12 @@ export function localNow(tz: string) {
   }
 }
 
-/** Offset of a time zone from UTC at a given instant, in minutes. */
-function offsetMinutes(tz: string, at: Date) {
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })
-      .formatToParts(at).map((p) => [p.type, p.value]),
-  );
-  const asUtc = Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute, +parts.second);
-  return (asUtc - at.getTime()) / 60000;
-}
-
 /** "2026-11-02T09:30" typed in a datetime-local field, read as TEAM_TZ, to an ISO instant. */
 export function teamLocalToIso(local: string | null | undefined): string | null {
-  if (!local) return null;
-  const m = local.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
-  if (!m) return null;
-  const guess = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
-  const off = offsetMinutes(TEAM_TZ, new Date(guess));
-  return new Date(guess - off * 60000).toISOString();
+  return zonedLocalToIso(local, TEAM_TZ);
 }
 
 /** ISO instant to the value a datetime-local field needs, in TEAM_TZ. */
 export function isoToTeamLocal(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  const shifted = new Date(d.getTime() + offsetMinutes(TEAM_TZ, d) * 60000);
-  return shifted.toISOString().slice(0, 16);
+  return isoToZonedLocal(iso, TEAM_TZ);
 }

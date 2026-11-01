@@ -24,7 +24,7 @@ export function ActionForm({ action, success, reset = false, className, children
         const res = await action(form);
         if (!res.ok) toast.error(res.error);
         else {
-          if (success) toast.success(success);
+          if (res.message ?? success) toast.success(res.message ?? success);
           if (reset) ref.current?.reset();
         }
       }}

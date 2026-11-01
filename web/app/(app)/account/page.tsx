@@ -7,14 +7,20 @@ import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PasswordForm } from "@/components/password-form";
+import { MailAccountCard, type MailAccountRow } from "@/components/mail-account-card";
 
 export const metadata: Metadata = { title: "Account" };
 
-export default async function AccountPage({ searchParams }: { searchParams: Promise<{ reset?: string }> }) {
-  const { reset } = await searchParams;
+export default async function AccountPage({ searchParams }: { searchParams: Promise<{ reset?: string; mail?: string; reason?: string }> }) {
+  const { reset, mail, reason } = await searchParams;
   const { member } = await currentMember();
   const supabase = await supabaseServer();
-  const { data: { user } } = await supabase.auth.getUser();
+  const [{ data: { user } }, mailRes, sendingRes] = await Promise.all([
+    supabase.auth.getUser(),
+    supabase.rpc("my_mail_account"),
+    supabase.rpc("sending_enabled"),
+  ]);
+  const mailAccount = ((mailRes.data as MailAccountRow[] | null) ?? [])[0] ?? null;
   const providers = new Set((user?.identities ?? []).map((i) => i.provider));
 
   return (
@@ -22,6 +28,9 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
       <PageHeader title="Account" description={`${memberName(member)} · ${user?.email ?? ""}`} />
 
       <div className="grid max-w-3xl gap-6">
+        <MailAccountCard account={mailAccount} sendingEnabled={sendingRes.data === true} isOwner={member?.role === "owner"}
+          status={mail} reason={reason} fallbackName={memberName(member)} />
+
         <Card>
           <CardHeader>
             <CardTitle>Sign-in methods</CardTitle>
