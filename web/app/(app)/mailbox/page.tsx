@@ -285,7 +285,7 @@ export default async function MailboxPage({ searchParams }: { searchParams: Prom
                 </div>
                 <MessageActions
                   inboxId={inbox.id} folder={folder} uid={message.uid} flagged={message.flagged} back={href({ uid: null })}
-                  href={(c) => href({ compose: c })}
+                  links={{ reply: href({ compose: "reply" }), replyall: href({ compose: "replyall" }), forward: href({ compose: "forward" }) }}
                 />
                 {messageLead && (
                   <Button asChild size="sm" variant="secondary">
