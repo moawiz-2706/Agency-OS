@@ -112,6 +112,11 @@ and excludes `*.test.ts`.
   page), per-inbox daily limit, 2-minute gap, suppression/do-not-contact/bounced/consent (CASL for Canada),
   signature (postal address) required, opt-out line auto-added, never sends a fake "Re:" when the first email
   isn't synced.
+- **Unsubscribe and bounce guard (`0008`):** outreach sends carry `List-Unsubscribe` + one-click POST
+  (`/api/unsubscribe`, signed per address with a key derived from `MAIL_TOKEN_KEY`, `lib/mail/unsubscribe.ts`);
+  people who open the link get `/unsubscribe` with a confirm button. `mailer_unsubscribe` suppresses the address,
+  marks contacts do-not-contact, cancels pending email. A trigger on `inbound_messages` switches sending off
+  when 2+ bounces in 24 h exceed 3% of sends (`settings.sending_paused`, shown on Account; turning sending on clears it).
 - **Sync** stores only messages to/from contacts: sends made in the inbox itself → touch + "contacted";
   replies → "replied" + stop pending follow-ups; "no"/"unsubscribe" → suppression + do-not-contact;
   bounces → email marked bounced; out-of-office → recorded, doesn't stop anything.
@@ -138,7 +143,7 @@ and excludes `*.test.ts`.
 
 ## Live state (as of 2026-11-01)
 
-- Live: migrations 0001–0007, PRs #1–#13 merged and deployed. PR #14 closed (rejected).
+- Live: migrations 0001–0007 (0008+ are in open PRs until the owner runs them), PRs #1–#13 merged and deployed. PR #14 closed (rejected).
 - ~1,015 leads: 1,000 imported from CSV (101 with external-AI research reports) + 15 `MANUS-*` GHL leads
   (all owned by Moawiz) with research, verified contacts and owner names.
 - Connected inboxes: both GoDaddy mailboxes, with signatures. **Moawiz's personal Gmail is not connected yet.**
@@ -168,6 +173,6 @@ and excludes `*.test.ts`.
   host"): just retry.
 - Next.js 16: `proxy.ts` replaces `middleware.ts`; route files may only export route handlers/config (put
   shared constants in `lib/`); layouts can't export arbitrary values either.
-- Tests: `pnpm test:db` (PGlite, 31 tests), `cd web && npm test` (7 tests). Add a test with each behaviour change.
+- Tests: `pnpm test:db` (PGlite, 33 tests), `cd web && npm test` (8 tests). Add a test with each behaviour change.
 - External-AI research CSVs often have wrong column counts; `import-research` realigns gap-column slips and
   rejects the rest. Always dry-run first.

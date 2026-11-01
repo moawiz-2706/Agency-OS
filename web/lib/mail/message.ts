@@ -31,6 +31,8 @@ export type Outgoing = {
   in_reply_to?: string | null; references?: string | null;
   /** Set for SMTP sends (Gmail adds its own): "<id@domain>" and the send time. */
   message_id?: string | null; date?: Date | null;
+  /** One-click unsubscribe link (RFC 8058), for outreach. */
+  unsubscribe_url?: string | null;
 };
 
 /** The full RFC 5322 message. Plain text only: no tracking, no HTML. */
@@ -44,6 +46,7 @@ export function buildMime(m: Outgoing): string {
   if (m.message_id) headers.push(`Message-ID: ${oneLine(m.message_id)}`);
   if (m.in_reply_to) headers.push(`In-Reply-To: ${oneLine(m.in_reply_to)}`);
   if (m.references || m.in_reply_to) headers.push(`References: ${oneLine(m.references || m.in_reply_to!)}`);
+  if (m.unsubscribe_url) headers.push(`List-Unsubscribe: <${oneLine(m.unsubscribe_url)}>`, "List-Unsubscribe-Post: List-Unsubscribe=One-Click");
   headers.push("MIME-Version: 1.0", 'Content-Type: text/plain; charset="UTF-8"', "Content-Transfer-Encoding: base64");
   const body = Buffer.from(composeText(m.body, m.signature).replace(/\n/g, "\r\n"), "utf8").toString("base64").replace(/.{76}/g, "$&\r\n");
   return `${headers.join("\r\n")}\r\n\r\n${body}`;

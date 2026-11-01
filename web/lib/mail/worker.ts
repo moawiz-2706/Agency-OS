@@ -2,7 +2,8 @@ import "server-only";
 import { createClient } from "@supabase/supabase-js";
 import type { ImapFlow } from "imapflow";
 import { decryptToken } from "./crypto.ts";
-import { envValue } from "./env.ts";
+import { envValue, publicOrigin } from "./env.ts";
+import { unsubscribeUrl } from "./unsubscribe.ts";
 import { GoogleAuthError, accessToken, getMessage, listMessageIds, revokeToken, sendRaw } from "./google.ts";
 import { MailAuthError, openImap, sendImap, syncImap, type Brief, type ImapSettings } from "./imap.ts";
 import { addresses, buildRaw, header, toSyncMessage, type SyncMessage } from "./message.ts";
@@ -87,6 +88,11 @@ export async function myImapInboxes(memberId: string) {
   return accounts.filter((a) => a.provider === "imap").map((a) => ({ id: a.id, email: a.email, imapHost: a.imap_host!, settings: imapSettings(a) }));
 }
 
+/** Someone clicked an unsubscribe link: never-contact list, do-not-contact, pending emails cancelled. */
+export async function unsubscribeAddress(email: string) {
+  return workerDb()<number>("mailer_unsubscribe", { p_email: email });
+}
+
 /** Revoke a Gmail inbox's grant at Google (before disconnecting it in the database). */
 export async function revokeInbox(memberId: string, accountId: string) {
   const rpc = workerDb();
@@ -99,9 +105,10 @@ const save = (rpc: Rpc, accountId: string) => (msgs: SyncMessage[], cursor: stri
   rpc<Record<string, number>>("mailer_sync_save", { p_account: accountId, p_msgs: msgs, p_synced_until: cursor });
 
 /** Claim the next due email for this inbox, send it with `send`, and record the result. */
-async function sendNext(rpc: Rpc, accountId: string, send: (c: Claim) => Promise<Sent>, authError: (e: unknown) => boolean) {
-  const c = await rpc<Claim | null>("mailer_claim", { p_account: accountId });
-  if (!c) return null;
+async function sendNext(rpc: Rpc, accountId: string, send: (c: Claim & { unsubscribe_url: string }) => Promise<Sent>, authError: (e: unknown) => boolean) {
+  const claimed = await rpc<Claim | null>("mailer_claim", { p_account: accountId });
+  if (!claimed) return null;
+  const c = { ...claimed, unsubscribe_url: unsubscribeUrl(publicOrigin(), claimed.to) };
   try {
     const sent = await send(c);
     await rpc("mailer_result", {
@@ -149,6 +156,7 @@ async function runGmail(rpc: Rpc, a: Account, send: boolean, report: MailRunRepo
       const raw = buildRaw({
         from_email: c.from_email, from_name: c.from_name, to: c.to, to_name: c.to_name,
         subject: c.subject, body: c.body, signature: c.signature, in_reply_to: c.in_reply_to, references: c.references,
+        unsubscribe_url: c.unsubscribe_url,
       });
       const sent = await sendRaw(access, raw, c.thread_id);
       const meta = await getMessage(access, sent.id, "metadata").catch(() => null);
