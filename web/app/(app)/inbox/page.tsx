@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { ReplyLabels } from "@/components/reply-labels";
+import { suggestLabel } from "@/lib/replies";
+import { stripQuoted } from "@/lib/mail/message";
 import type { Metadata } from "next";
 import { CornerDownRight } from "lucide-react";
 import { supabaseServer } from "@/lib/supabase/server";
@@ -22,13 +25,15 @@ export default async function InboxPage() {
   const supabase = await supabaseServer();
   const { member } = await currentMember();
   const [repliesRes, pendingRes] = await Promise.all([
-    supabase.from("inbound_messages").select("id,company_id,from_email,subject,body_text,snippet,received_at,classification,companies(name)")
+    supabase.from("inbound_messages").select("id,company_id,from_email,subject,body_text,snippet,received_at,classification,companies(name),contacts(full_name)")
       .eq("handled", false).or("classification.is.null,classification.not.in.(out_of_office,bounce)")
       .order("received_at", { ascending: false }).limit(100),
     supabase.from("outreach_messages").select("id,company_id,step,status,subject,scheduled_for,error,companies(name)")
       .eq("member_id", member?.id ?? "").in("status", ["pending_approval", "failed"]).order("scheduled_for").limit(200),
   ]);
-  const replies = (repliesRes.data ?? []) as unknown as Reply[];
+  const replies = (repliesRes.data ?? []) as unknown as (Reply & { contacts: { full_name: string | null } | null })[];
+  const { data: bookingUrl } = await supabase.rpc("booking_url");   // missing until migration 0012: no link
+  const myName = member?.full_name?.trim().split(/\s+/)[0] ?? null;
   const pending = (pendingRes.data ?? []) as unknown as Pending[];
   const toApprove = pending.filter((p) => p.status === "pending_approval");
   const failed = pending.filter((p) => p.status === "failed");
@@ -40,7 +45,7 @@ export default async function InboxPage() {
         <Card>
           <CardHeader>
             <CardTitle>Replies to handle ({replies.length})</CardTitle>
-            <CardDescription>Synced from Gmail every 5 minutes. A reply stops that lead&apos;s scheduled follow-ups; &quot;no&quot; or &quot;unsubscribe&quot; also adds them to the never-contact list.</CardDescription>
+            <CardDescription>Synced from Gmail every 5 minutes. A reply stops that lead&apos;s scheduled follow-ups; &quot;no&quot; or &quot;unsubscribe&quot; also adds them to the never-contact list. Label each reply to move the lead along (the highlighted label is a suggestion).</CardDescription>
           </CardHeader>
           <CardContent>
             {replies.length === 0 ? <p className="py-6 text-center text-sm text-muted-foreground">No replies waiting.</p> : (
@@ -56,6 +61,12 @@ export default async function InboxPage() {
                       </div>
                       <div className="mt-0.5 text-xs text-muted-foreground">{dateTime(r.received_at, TEAM_TZ)} · {ago(r.received_at)}{r.subject ? ` · ${r.subject}` : ""}</div>
                       <p className="mt-1 line-clamp-3 whitespace-pre-wrap">{r.body_text || r.snippet}</p>
+                      {r.company_id && (
+                        <div className="mt-2">
+                          <ReplyLabels id={r.id} current={r.classification} suggestion={suggestLabel(stripQuoted(r.body_text ?? r.snippet ?? ""))}
+                            firstName={r.contacts?.full_name?.trim().split(/\s+/)[0] ?? null} myName={myName} bookingUrl={(bookingUrl as string | null) ?? null} />
+                        </div>
+                      )}
                     </div>
                     <ActionForm action={markReplyHandled.bind(null, r.id, true)}><SubmitButton size="sm" variant="secondary">Mark handled</SubmitButton></ActionForm>
                   </li>

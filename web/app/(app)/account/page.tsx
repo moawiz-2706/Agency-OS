@@ -10,6 +10,10 @@ import { PasswordForm } from "@/components/password-form";
 import { MailAccountCard, type MailAccountRow } from "@/components/mail-account-card";
 import { mailSetupCheck } from "@/lib/mail/setup-check";
 import { headers } from "next/headers";
+import { saveBookingUrl } from "@/app/(app)/mail-actions";
+import { ActionForm } from "@/components/action-form";
+import { SubmitButton } from "@/components/submit-button";
+import { Input } from "@/components/ui/input";
 
 export const metadata: Metadata = { title: "Account" };
 
@@ -17,11 +21,12 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
   const { reset, mail, reason } = await searchParams;
   const { member } = await currentMember();
   const supabase = await supabaseServer();
-  const [{ data: { user } }, mailRes, sendingRes, checks] = await Promise.all([
+  const [{ data: { user } }, mailRes, sendingRes, checks, bookingRes] = await Promise.all([
     supabase.auth.getUser(),
     supabase.rpc("my_mail_accounts"),
     supabase.rpc("sending_enabled"),
     mailSetupCheck(await headers()),
+    supabase.rpc("booking_url"),   // missing until migration 0012 runs
   ]);
   const mailAccounts = (mailRes.data as MailAccountRow[] | null) ?? [];
   const providers = new Set((user?.identities ?? []).map((i) => i.provider));
@@ -33,6 +38,23 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
       <div className="grid max-w-3xl gap-6">
         <MailAccountCard accounts={mailAccounts} sendingEnabled={sendingRes.data === true} isOwner={member?.role === "owner"}
           status={mail} reason={reason} fallbackName={memberName(member)} checks={checks} />
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Booking link</CardTitle>
+            <CardDescription>Your calendar page (e.g. the booking section of thesentinelsystems.com). It goes into suggested replies to interested leads.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {member?.role === "owner" ? (
+              <ActionForm action={saveBookingUrl} className="flex flex-wrap gap-2">
+                <Input name="booking_url" type="url" defaultValue={(bookingRes.data as string | null) ?? ""} placeholder="https://thesentinelsystems.com/#book" className="min-w-64 flex-1" />
+                <SubmitButton>Save</SubmitButton>
+              </ActionForm>
+            ) : (
+              <p className="text-sm">{(bookingRes.data as string | null) ?? <span className="text-muted-foreground">Not set yet (an owner sets it).</span>}</p>
+            )}
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader>

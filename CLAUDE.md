@@ -125,6 +125,17 @@ and excludes `*.test.ts`.
   which are missing/wrong without revealing values. Don't change `MAIL_TOKEN_KEY` (stored secrets would
   stop decrypting).
 
+### Tasks, deals, reply labels (`0012`)
+- `tasks` (optional lead, assignee, due, done; team RLS, delete = creator or owner). `/tasks` lists mine/everyone by
+  overdue / today / coming up / no date, and includes leads whose `next_step_at` is within a week (ticking clears it).
+  Lead page: Tasks card + Deal card (the Status card no longer edits deal value).
+- `deals`: one per lead (`deals_company_uq`), offer key, setup + monthly fee, stage open/proposal_sent/won/lost.
+  `saveDeal` mirrors first-year value into `companies.deal_value_cents` and moves the lead to proposal_sent/won/lost.
+- `classify_reply(id, label)`: interested/meeting_request -> stage interested + task "Send X the booking link";
+  question/pricing -> at least replied; not_now -> nurture, stop pending, task in 60 days; not_interested -> lost;
+  unsubscribe -> suppress. Inbox shows label buttons with a suggestion (`lib/replies.ts`, keyword rules) and a
+  suggested answer using `booking_url()` (owner sets it on Account).
+
 ### Web app
 - Routes: `/dashboard`, `/leads`, `/leads/[id]` (Email card: compose/schedule in the lead's time zone,
   approve, send now, replies), `/pipeline`, `/inbox` (replies to handle, approvals, failures), `/mailbox`,
@@ -168,6 +179,6 @@ and excludes `*.test.ts`.
   host"): just retry.
 - Next.js 16: `proxy.ts` replaces `middleware.ts`; route files may only export route handlers/config (put
   shared constants in `lib/`); layouts can't export arbitrary values either.
-- Tests: `pnpm test:db` (PGlite, 31 tests), `cd web && npm test` (7 tests). Add a test with each behaviour change.
+- Tests: `pnpm test:db` (PGlite, 36 tests), `cd web && npm test` (7 tests). Add a test with each behaviour change.
 - External-AI research CSVs often have wrong column counts; `import-research` realigns gap-column slips and
   rejects the rest. Always dry-run first.

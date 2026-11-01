@@ -13,13 +13,15 @@ import {
   CHANNEL_LABEL, CHANNELS, OUTCOME_LABEL, OUTCOMES, STAGE_LABEL, STAGES, memberName,
   type Channel, type Outcome, type Stage,
 } from "@/lib/crm";
-import { TEAM_TZ, ago, dateTime, isoToTeamLocal, localNow, minutes, money } from "@/lib/format";
+import { TEAM_TZ, ago, dateTime, isoToTeamLocal, localNow, minutes } from "@/lib/format";
 import { addContact, addNote, logTouch, updateLead } from "../actions";
 import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/submit-button";
 import { ResearchReportCard, WhatToSell } from "@/components/research-cards";
 import { isOfferKey, type RecommendedOffer } from "@/lib/offers";
 import { StageBadge } from "@/components/stage-badge";
+import { DealCard, LeadTasksCard, type Deal } from "@/components/lead-work";
+import { toTaskItem, type TaskRowData } from "@/lib/tasks";
 import { MemberAvatar } from "@/components/member-avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -83,6 +85,14 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   ]);
   const c = companyRes.data as Company | null;
   if (!c) notFound();
+  // Missing until migration 0012 runs: then the cards just start empty.
+  const [dealRes, tasksRes] = await Promise.all([
+    supabase.from("deals").select("offer,currency,setup_fee_cents,monthly_fee_cents,stage,probability,expected_close,notes").eq("company_id", id).maybeSingle(),
+    supabase.from("tasks").select("id,title,due_at,done_at,company_id,assignee_id,companies(name)").eq("company_id", id).is("done_at", null)
+      .order("due_at", { ascending: true, nullsFirst: false }).limit(50),
+  ]);
+  const deal = (dealRes.data ?? null) as Deal | null;
+  const leadTasks = ((tasksRes.data ?? []) as unknown as TaskRowData[]).map((t) => toTaskItem(t, team));
 
   const contacts = (contactsRes.data ?? []) as Contact[];
   const touches = (touchesRes.data ?? []) as Touch[];
@@ -95,6 +105,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   const leadTz = leadTimeZone(c);
   const leadTime = localNow(leadTz);
   const nowLocal = isoToTeamLocal(new Date().toISOString());
+  const tomorrowLocal = isoToTeamLocal(new Date(new Date().getTime() + 86400_000).toISOString());
 
   const enrichment = Object.entries(c.enrichment ?? {}).filter(([, v]) => s(v));
   const facts = enrichment.filter(([k, v]) => v.length <= 48 && !/url$/i.test(k));
@@ -274,26 +285,15 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
                 <Field label={`Next step date (${TEAM_TZ})`}>
                   <Input name="next_step_at" type="datetime-local" defaultValue={isoToTeamLocal(c.next_step_at as string | null)} />
                 </Field>
-                <div className="grid grid-cols-[1fr_6rem] gap-2">
-                  <Field label="Deal value">
-                    <Input name="deal_value" inputMode="decimal" placeholder="0"
-                      defaultValue={c.deal_value_cents != null ? String((c.deal_value_cents as number) / 100) : ""} />
-                  </Field>
-                  <Field label="Currency">
-                    <Select name="deal_currency" defaultValue={(c.deal_currency as string) ?? "USD"}>
-                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                      <SelectContent><SelectItem value="USD">USD</SelectItem><SelectItem value="CAD">CAD</SelectItem></SelectContent>
-                    </Select>
-                  </Field>
-                </div>
                 <Field label="Lost reason"><Input name="lost_reason" defaultValue={s(c.lost_reason) ?? ""} placeholder="Only if lost" /></Field>
                 <SubmitButton className="w-full">Save changes</SubmitButton>
-                {c.deal_value_cents != null && (
-                  <p className="text-center text-xs text-muted-foreground">Deal {money(c.deal_value_cents as number, (c.deal_currency as string) ?? "USD")}</p>
-                )}
               </ActionForm>
             </CardContent>
           </Card>
+
+          <LeadTasksCard companyId={c.id} tasks={leadTasks} team={team} meId={me?.id ?? null}
+            defaultDue={tomorrowLocal} />
+          <DealCard companyId={c.id} deal={deal} suggestedOffer={offers[0]?.key ?? null} />
 
           <Card>
             <CardHeader><CardTitle>Company</CardTitle></CardHeader>

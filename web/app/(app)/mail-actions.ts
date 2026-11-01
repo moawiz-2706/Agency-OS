@@ -219,3 +219,22 @@ export async function setSendingEnabled(on: boolean): Promise<ActionResult> {
     return on ? "Sending is on" : "Sending is off: nothing will go out";
   });
 }
+
+export async function classifyReply(id: string, label: string): Promise<ActionResult> {
+  return attempt(async () => {
+    const res = await rpc("classify_reply", { p_id: id, p_class: label });
+    revalidatePath("/inbox");
+    revalidatePath("/tasks");
+    revalidatePath("/leads", "layout");
+    return String(res ?? "Labelled");
+  });
+}
+
+export async function saveBookingUrl(form: FormData): Promise<ActionResult> {
+  return attempt(async () => {
+    await rpc("set_booking_url", { p_url: str(form, "booking_url") });
+    revalidatePath("/account");
+    revalidatePath("/inbox");
+    return "Booking link saved";
+  });
+}
