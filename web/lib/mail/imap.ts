@@ -136,6 +136,41 @@ export type ImapClaim = {
   in_reply_to: string | null; references: string | null; from_email: string; from_name: string | null; signature: string;
 };
 
+export type DirectMail = {
+  from_name: string | null; to: string[]; cc: string[]; bcc: string[]; subject: string; text: string;
+  in_reply_to: string | null; references: string | null;
+  attachments: { filename: string; content: Buffer; contentType: string }[];
+};
+
+/** An email written by hand in the Mailbox: plain text plus attachments, filed in Sent like webmail does. */
+export async function sendDirect(s: ImapSettings, m: DirectMail) {
+  const messageId = `<${randomUUID()}@${s.email.split("@")[1]}>`;
+  const built = await nodemailer.createTransport({ streamTransport: true, buffer: true, newline: "windows" }).sendMail({
+    from: { name: m.from_name ?? "", address: s.email }, to: m.to, cc: m.cc,
+    subject: m.subject.replace(/[\r\n]+/g, " ").trim(), text: m.text, messageId, date: new Date(),
+    inReplyTo: m.in_reply_to ?? undefined, references: m.references ?? undefined,
+    attachments: m.attachments.map((a) => ({ filename: a.filename, content: a.content, contentType: a.contentType })),
+  });
+  // Bcc goes only in the SMTP envelope: a stream-built message would otherwise carry the Bcc header.
+  const raw = built.message as Buffer;
+  try {
+    await smtpTransport(s).sendMail({ envelope: { from: s.email, to: [...m.to, ...m.cc, ...m.bcc] }, raw });
+  } catch (e) {
+    if (isAuthFailure(e)) throw new MailAuthError(`${s.email}: the mail server refused to send with this password. Reconnect it.`);
+    throw e;
+  }
+  const c = await openImap(s).catch(() => null);
+  if (c) {
+    try {
+      const folder = await sentFolder(c).catch(() => null);
+      if (folder) await c.append(folder, raw, ["\\Seen"]).catch(() => {});
+    } finally {
+      await c.logout().catch(() => {});
+    }
+  }
+  return messageId;
+}
+
 /** Send over SMTP, then file a copy in Sent like a normal mail app would (SMTP alone doesn't). */
 export async function sendImap(c: ImapFlow | null, s: ImapSettings, claim: ImapClaim) {
   const messageId = `<${randomUUID()}@${s.email.split("@")[1]}>`;

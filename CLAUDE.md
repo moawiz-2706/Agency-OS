@@ -117,8 +117,16 @@ and excludes `*.test.ts`.
   bounces → email marked bounced; out-of-office → recorded, doesn't stop anything.
 - IMAP threads are named after the first Message-ID (`rfc:<id>`); bounces are matched through the original
   headers quoted in the delivery report.
-- **Mailbox page** (`/mailbox`): the member's own IMAP inbox/Sent read **live** (read-only, BODY.PEEK,
-  nothing stored), HTML shown as text, lead senders linked.
+- **Mailbox page** (`/mailbox`): a full mail client for the member's own IMAP inboxes, read **live** from
+  the server (nothing stored in the DB). Folders (Inbox, Sent, Drafts, Archive, Spam, Trash), search, opening
+  marks read, star / unread / archive / delete (= move to Trash, never permanent), attachment downloads
+  (`/api/mailbox/attachment`, always a download). HTML email shows in a sandboxed iframe with a strict CSP;
+  remote images stay hidden until "Show images". Compose / reply / reply all / forward with attachments (≤4 MB)
+  sends **straight away** over SMTP and files a copy in Sent (`sendDirect`). The kill switch and daily limit
+  govern scheduled outreach only; hand-written mail still obeys the never-contact list, do-not-contact,
+  bounces and (for new emails to non-won leads) consent/CASL, adds the opt-out line then, max 20 recipients
+  (`lib/mail/compose.ts`). Mail to a lead is logged by the sync, which runs right after the send.
+  Lead contacts have a "Write now" link into the composer. Gmail inboxes aren't in the Mailbox yet.
 - Vercel env (names only): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `MAIL_TOKEN_KEY`,
   `MAILER_SECRET`, `CRON_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, optional `APP_URL`,
   `NEXT_PUBLIC_TEAM_TIME_ZONE` (default `Asia/Karachi`). **Account → Email inboxes → Setup check** shows
@@ -168,6 +176,6 @@ and excludes `*.test.ts`.
   host"): just retry.
 - Next.js 16: `proxy.ts` replaces `middleware.ts`; route files may only export route handlers/config (put
   shared constants in `lib/`); layouts can't export arbitrary values either.
-- Tests: `pnpm test:db` (PGlite, 31 tests), `cd web && npm test` (7 tests). Add a test with each behaviour change.
+- Tests: `pnpm test:db` (PGlite, 31 tests), `cd web && npm test` (13 tests). Add a test with each behaviour change.
 - External-AI research CSVs often have wrong column counts; `import-research` realigns gap-column slips and
   rejects the rest. Always dry-run first.
