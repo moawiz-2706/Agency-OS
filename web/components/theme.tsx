@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { ThemeProvider as NextThemes, useTheme } from "next-themes";
 import { Monitor, Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  return <NextThemes attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>{children}</NextThemes>;
+  // The contact form sits inside the public website, which is light: don't follow the visitor's dark mode there.
+  const forced = usePathname()?.startsWith("/forms/") ? "light" : undefined;
+  return <NextThemes attribute="class" defaultTheme="system" enableSystem forcedTheme={forced} disableTransitionOnChange>{children}</NextThemes>;
 }
 
 /** Light / dark / system switch. Renders a neutral icon until mounted, so server and client HTML match. */

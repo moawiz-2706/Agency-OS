@@ -32,7 +32,7 @@ audit, research and offer recommendations, a team CRM, and email outreach with r
 | `supabase/migrations` | SQL migrations `0001`–`0007`, all **applied on live** |
 | `supabase/test` | Database tests on PGlite (real Postgres in WASM) with Supabase auth stand-ins (`harness.mjs`) |
 | `web/` | Standalone **npm** Next.js 16 app (not part of the pnpm workspace): React 19, Tailwind v4, shadcn/ui, `@supabase/ssr`. Deployed on Vercel from `main` (root dir `web`) |
-| `docs/GO-LIVE.md`, `docs/GMAIL.md` | Setup guides (database, auth, deploy; email inboxes) |
+| `docs/GO-LIVE.md`, `docs/GMAIL.md`, `docs/WEB-FORM.md` | Setup guides (database, auth, deploy; email inboxes; website form embed) |
 | `docs/research/` | External-AI research workflow: prompt, CSV template, how to import |
 | `data/` (gitignored) | Lead CSVs, research results, outreach sequences/plans. Not in git: copy it separately |
 
@@ -124,6 +124,13 @@ and excludes `*.test.ts`.
   `NEXT_PUBLIC_TEAM_TIME_ZONE` (default `Asia/Karachi`). **Account → Email inboxes → Setup check** shows
   which are missing/wrong without revealing values. Don't change `MAIL_TOKEN_KEY` (stored secrets would
   stop decrypting).
+
+### Website form (`0011`, `docs/WEB-FORM.md`)
+- Public `POST /api/forms/contact` (CORS: `FORM_ORIGINS`, default the main domain + www) and an embeddable
+  `/forms/contact` page (iframe, always light, posts its height to the parent). `lib/forms.ts` traps bots (hidden
+  `company_url`, <3 s) and answers them "ok". `web_form_submit` (worker secret) rate-limits per IP hash (5/h, 200/day),
+  joins a lead by email then website domain or creates one (`source web_form`, stage interested), sets the contact
+  to `express` consent, pins a note and adds an unhandled "Website enquiry" to the Inbox.
 
 ### Web app
 - Routes: `/dashboard`, `/leads`, `/leads/[id]` (Email card: compose/schedule in the lead's time zone,

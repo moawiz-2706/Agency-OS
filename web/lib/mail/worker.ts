@@ -87,6 +87,13 @@ export async function myImapInboxes(memberId: string) {
   return accounts.filter((a) => a.provider === "imap").map((a) => ({ id: a.id, email: a.email, imapHost: a.imap_host!, settings: imapSettings(a) }));
 }
 
+/** A website enquiry becomes (or joins) a lead: see migration 0011. */
+export async function submitWebForm(f: { name: string; email: string; company: string; website: string; tools: string; pain: string; page: string }, ipHash: string) {
+  return workerDb()<{ company_id: string; new_lead: boolean }>("web_form_submit", {
+    p_name: f.name, p_email: f.email, p_company: f.company, p_website: f.website, p_tools: f.tools, p_pain: f.pain, p_page: f.page, p_ip_hash: ipHash,
+  });
+}
+
 /** Revoke a Gmail inbox's grant at Google (before disconnecting it in the database). */
 export async function revokeInbox(memberId: string, accountId: string) {
   const rpc = workerDb();
