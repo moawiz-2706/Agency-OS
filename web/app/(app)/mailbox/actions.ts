@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
 import { currentMember } from "@/lib/team";
-import { TEAM_TZ } from "@/lib/format";
+import { TEAM_TZ, teamLocalToIso } from "@/lib/format";
 import { myImapInboxes, runMail } from "@/lib/mail/worker";
 import { sendDirect } from "@/lib/mail/imap";
 import { FOLDERS, getMessage, moveMessage, setFlag, type FlagOp, type Folder } from "@/lib/mail/mailbox";
@@ -77,6 +77,11 @@ export async function sendFromMailbox(form: FormData): Promise<ActionResult> {
     const body = str(form, "body") ?? "";
     if (!body && mode !== "forward") throw new Error("Write a message");
 
+    // "Schedule send": the time is typed in the team's time zone.
+    const sendAt = teamLocalToIso(str(form, "send_at"));
+    const later = !!sendAt && new Date(sendAt).getTime() > Date.now() + 60_000;
+    if (str(form, "send_at") && !later) throw new Error("Pick a time in the future to schedule it, or send it now");
+
     const files = form.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
     if (files.reduce((t, f) => t + f.size, 0) > MAX_UPLOAD) throw new Error("Attachments can be up to 4 MB in total");
     const attachments: { filename: string; content: Buffer; contentType: string }[] = await Promise.all(files.map(async (f) => ({
@@ -119,10 +124,19 @@ export async function sendFromMailbox(form: FormData): Promise<ActionResult> {
     const withSignature = form.get("signature") === "on";
     if (check.optOut && !account?.signature?.trim()) throw new Error("Add this inbox's signature (with your postal address) on the Account page before emailing a lead");
 
+    const text = directText({ body, signature: withSignature || check.optOut ? account?.signature : null, optOut: check.optOut, quoted });
+    if (later) {
+      if (attachments.length) throw new Error("Scheduled emails can't carry attachments yet: send it now, or remove them");
+      await supabase.rpc("schedule_my_mail", {
+        p_account: inbox.id, p_to: to, p_cc: cc, p_bcc: bcc, p_subject: subject, p_body: text,
+        p_in_reply_to: inReplyTo, p_references: references, p_send_at: sendAt,
+      }).then(({ error }) => { if (error) throw new Error(error.message); });
+      revalidatePath("/mailbox");
+      return `Scheduled for ${new Date(sendAt!).toLocaleString("en-GB", { timeZone: TEAM_TZ, dateStyle: "medium", timeStyle: "short" })}`;
+    }
+
     await sendDirect(inbox.settings, {
-      from_name: account?.from_name ?? null, to, cc, bcc, subject,
-      text: directText({ body, signature: withSignature || check.optOut ? account?.signature : null, optOut: check.optOut, quoted }),
-      in_reply_to: inReplyTo, references, attachments,
+      from_name: account?.from_name ?? null, to, cc, bcc, subject, text, in_reply_to: inReplyTo, references, attachments,
     });
     if (reply && srcUid) await setFlag(inbox.settings, srcFolder, srcUid, "answered").catch(() => {});
     // Email to a lead shows on its timeline after the next sync; run one now.
@@ -146,5 +160,15 @@ export async function moveTo(inboxId: string, folder: Folder, uid: number, to: F
     await moveMessage(inbox.settings, folderOf(folder), uid, folderOf(to));
     revalidatePath("/mailbox");
     return to === "trash" ? "Moved to Trash" : to === "archive" ? "Archived" : to === "inbox" ? "Moved to Inbox" : "Moved";
+  });
+}
+
+export async function cancelScheduled(id: string): Promise<ActionResult> {
+  return attempt(async () => {
+    const supabase = await supabaseServer();
+    const { error } = await supabase.rpc("cancel_my_scheduled_mail", { p_id: id });
+    if (error) throw new Error(error.message);
+    revalidatePath("/mailbox");
+    return "Cancelled: it won't be sent";
   });
 }

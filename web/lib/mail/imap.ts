@@ -134,6 +134,7 @@ export async function syncImap(c: ImapFlow, s: ImapSettings, since: Date,
 export type ImapClaim = {
   to: string; to_name: string | null; subject: string; body: string; thread_id: string | null;
   in_reply_to: string | null; references: string | null; from_email: string; from_name: string | null; signature: string;
+  unsubscribe_url?: string | null;
 };
 
 export type DirectMail = {
@@ -177,7 +178,7 @@ export async function sendImap(c: ImapFlow | null, s: ImapSettings, claim: ImapC
   const mime = buildMime({
     from_email: claim.from_email, from_name: claim.from_name, to: claim.to, to_name: claim.to_name, subject: claim.subject,
     body: claim.body, signature: claim.signature, in_reply_to: claim.in_reply_to, references: claim.references,
-    message_id: messageId, date: new Date(),
+    message_id: messageId, date: new Date(), unsubscribe_url: claim.unsubscribe_url,
   });
   try {
     await smtpTransport(s).sendMail({ envelope: { from: s.email, to: [claim.to] }, raw: mime });
