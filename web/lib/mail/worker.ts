@@ -2,9 +2,10 @@ import "server-only";
 import { createClient } from "@supabase/supabase-js";
 import type { ImapFlow } from "imapflow";
 import { decryptToken } from "./crypto.ts";
-import { envValue } from "./env.ts";
+import { envValue, publicOrigin } from "./env.ts";
+import { unsubscribeUrl } from "./unsubscribe.ts";
 import { GoogleAuthError, accessToken, getMessage, listMessageIds, revokeToken, sendRaw } from "./google.ts";
-import { MailAuthError, openImap, sendImap, syncImap, type Brief, type ImapSettings } from "./imap.ts";
+import { MailAuthError, openImap, sendDirect, sendImap, syncImap, type Brief, type ImapSettings } from "./imap.ts";
 import { addresses, buildRaw, header, toSyncMessage, type SyncMessage } from "./message.ts";
 
 // One run for each connected inbox: sync it (your own sends, replies, bounces) into the
@@ -25,7 +26,8 @@ type Claim = {
   in_reply_to: string | null; references: string | null; from_email: string; from_name: string | null; signature: string;
 };
 type Sent = { id: string; threadId: string; rfcId: string | null };
-export type MailRunReport = { email: string; synced?: Record<string, number>; sent?: string | null; error?: string };
+export type MailRunReport = { email: string; synced?: Record<string, number>; sent?: string | null; scheduled?: number; error?: string };
+type ScheduledClaim = { id: string; to: string[]; cc: string[]; bcc: string[]; subject: string; body: string; in_reply_to: string | null; references: string | null };
 type Rpc = <T>(fn: string, args: Record<string, unknown>) => Promise<T>;
 
 function workerDb(): Rpc {
@@ -94,6 +96,11 @@ export async function submitWebForm(f: { name: string; email: string; company: s
   });
 }
 
+/** Someone clicked an unsubscribe link: never-contact list, do-not-contact, pending emails cancelled. */
+export async function unsubscribeAddress(email: string) {
+  return workerDb()<number>("mailer_unsubscribe", { p_email: email });
+}
+
 /** Revoke a Gmail inbox's grant at Google (before disconnecting it in the database). */
 export async function revokeInbox(memberId: string, accountId: string) {
   const rpc = workerDb();
@@ -106,9 +113,10 @@ const save = (rpc: Rpc, accountId: string) => (msgs: SyncMessage[], cursor: stri
   rpc<Record<string, number>>("mailer_sync_save", { p_account: accountId, p_msgs: msgs, p_synced_until: cursor });
 
 /** Claim the next due email for this inbox, send it with `send`, and record the result. */
-async function sendNext(rpc: Rpc, accountId: string, send: (c: Claim) => Promise<Sent>, authError: (e: unknown) => boolean) {
-  const c = await rpc<Claim | null>("mailer_claim", { p_account: accountId });
-  if (!c) return null;
+async function sendNext(rpc: Rpc, accountId: string, send: (c: Claim & { unsubscribe_url: string }) => Promise<Sent>, authError: (e: unknown) => boolean) {
+  const claimed = await rpc<Claim | null>("mailer_claim", { p_account: accountId });
+  if (!claimed) return null;
+  const c = { ...claimed, unsubscribe_url: unsubscribeUrl(publicOrigin(), claimed.to) };
   try {
     const sent = await send(c);
     await rpc("mailer_result", {
@@ -135,6 +143,35 @@ async function runImap(rpc: Rpc, a: Account, send: boolean, report: MailRunRepor
   } finally {
     await c?.logout().catch(() => {});
   }
+  if (send) report.scheduled = await sendScheduled(rpc, a, s);
+}
+
+/** Email scheduled in the Mailbox: a few per run, from the inbox it was written in. */
+async function sendScheduled(rpc: Rpc, a: Account, s: ImapSettings) {
+  let sent = 0;
+  for (let i = 0; i < 5; i++) {
+    let m: ScheduledClaim | null;
+    try {
+      m = await rpc<ScheduledClaim | null>("mailer_claim_scheduled", { p_account: a.id });
+    } catch (e) {
+      // Migration 0009 not run yet: nothing can be scheduled, so carry on as before.
+      if (/mailer_claim_scheduled.*(schema cache|does not exist)|Could not find the function/i.test(String(e))) return 0;
+      throw e;
+    }
+    if (!m) break;
+    try {
+      await sendDirect(s, {
+        from_name: a.from_name, to: m.to, cc: m.cc, bcc: m.bcc, subject: m.subject, text: m.body,
+        in_reply_to: m.in_reply_to, references: m.references, attachments: [],
+      });
+      await rpc("mailer_scheduled_result", { p_id: m.id, p_ok: true, p_error: null });
+      sent++;
+    } catch (e) {
+      await rpc("mailer_scheduled_result", { p_id: m.id, p_ok: false, p_error: e instanceof Error ? e.message : String(e) });
+      if (e instanceof MailAuthError) throw e;
+    }
+  }
+  return sent;
 }
 
 // ---------- Gmail ----------
@@ -156,6 +193,7 @@ async function runGmail(rpc: Rpc, a: Account, send: boolean, report: MailRunRepo
       const raw = buildRaw({
         from_email: c.from_email, from_name: c.from_name, to: c.to, to_name: c.to_name,
         subject: c.subject, body: c.body, signature: c.signature, in_reply_to: c.in_reply_to, references: c.references,
+        unsubscribe_url: c.unsubscribe_url,
       });
       const sent = await sendRaw(access, raw, c.thread_id);
       const meta = await getMessage(access, sent.id, "metadata").catch(() => null);
