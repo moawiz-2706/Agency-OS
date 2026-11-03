@@ -136,3 +136,11 @@ test("unsubscribe links are signed per address and ride in the List-Unsubscribe 
   const head = Buffer.from(raw, "base64url").toString("utf8").split("\r\n\r\n")[0];
   assert.match(head, /\r\nList-Unsubscribe: <https:\/\/app\.test\/api\/unsubscribe\?e=[^>]+>\r\nList-Unsubscribe-Post: List-Unsubscribe=One-Click/);
 });
+
+test("an outreach BCC copy is a single clean header for Gmail, and absent unless asked for", () => {
+  const head = (bcc?: string) => Buffer.from(buildRaw({ from_email: "a@b.test", to: "darin@swift.test", subject: "Hi", body: "Hi", bcc }), "base64url")
+    .toString("utf8").split("\r\n\r\n")[0];
+  assert.match(head("abdullah@partner.test"), /\r\nTo: darin@swift\.test\r\nBcc: abdullah@partner\.test\r\n/);
+  assert.doesNotMatch(head(), /^Bcc:/m);
+  assert.throws(() => head("x@y.test\r\nCc: victim@z.test"), /invalid email address/);
+});

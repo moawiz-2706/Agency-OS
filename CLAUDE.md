@@ -117,6 +117,8 @@ and excludes `*.test.ts`.
   people who open the link get `/unsubscribe` with a confirm button. `mailer_unsubscribe` suppresses the address,
   marks contacts do-not-contact, cancels pending email. A trigger on `inbound_messages` switches sending off
   when 2+ bounces in 24 h exceed 3% of sends (`settings.sending_paused`, shown on Account; turning sending on clears it).
+- **Outreach BCC (`0013`):** `mail_accounts.bcc_email` (set per inbox on Account, `set_my_inbox_bcc`); the worker adds it as a
+  `Bcc:` header for Gmail (Gmail strips it) and as an extra SMTP envelope recipient for IMAP inboxes.
 - **Sync** stores only messages to/from contacts: sends made in the inbox itself → touch + "contacted";
   replies → "replied" + stop pending follow-ups; "no"/"unsubscribe" → suppression + do-not-contact;
   bounces → email marked bounced; out-of-office → recorded, doesn't stop anything.

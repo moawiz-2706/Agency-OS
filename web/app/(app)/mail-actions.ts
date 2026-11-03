@@ -148,6 +148,7 @@ export async function saveMailSettings(accountId: string, form: FormData): Promi
       p_account: accountId, p_from_name: str(form, "from_name"), p_signature: str(form, "signature"),
       p_daily_limit: Number(str(form, "daily_limit") ?? 20),
     });
+    if (form.has("bcc_email")) await rpc("set_my_inbox_bcc", { p_account: accountId, p_email: str(form, "bcc_email") });
     revalidatePath("/account");
     return "Inbox settings saved";
   });

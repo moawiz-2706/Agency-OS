@@ -33,6 +33,8 @@ export type Outgoing = {
   message_id?: string | null; date?: Date | null;
   /** One-click unsubscribe link (RFC 8058), for outreach. */
   unsubscribe_url?: string | null;
+  /** A hidden copy (Gmail only: Gmail delivers it and strips the header; SMTP puts it in the envelope instead). */
+  bcc?: string | null;
 };
 
 /** The full RFC 5322 message. Plain text only: no tracking, no HTML. */
@@ -40,6 +42,7 @@ export function buildMime(m: Outgoing): string {
   const headers = [
     `From: ${mailbox(m.from_email, m.from_name)}`,
     `To: ${mailbox(m.to, m.to_name)}`,
+    ...(m.bcc ? [`Bcc: ${mailbox(m.bcc)}`] : []),
     `Subject: ${encodeHeader(oneLine(m.subject))}`,
   ];
   if (m.date) headers.push(`Date: ${m.date.toUTCString().replace("GMT", "+0000")}`);

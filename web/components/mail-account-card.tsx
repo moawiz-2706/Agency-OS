@@ -15,6 +15,8 @@ export type MailAccountRow = {
   id: string; email: string; provider: "gmail" | "imap" | "microsoft"; from_name: string | null; signature: string | null;
   daily_limit: number; is_default: boolean; connected: boolean; needs_reconnect: boolean; last_error: string | null;
   last_sync_at: string | null; last_sent_at: string | null; sent_24h: number; sending_enabled: boolean;
+  /** From my_inbox_bcc() (migration 0013); undefined before it runs, and then the field is hidden. */
+  bcc_email?: string | null;
 };
 
 const SIGNATURE_EXAMPLE = "Moawiz\nThe Sentinel Systems · +1 555 000 0000\n123 Main St, Suite 100, Austin, TX 78701";
@@ -46,6 +48,12 @@ function Inbox({ a, fallbackName }: { a: MailAccountRow; fallbackName: string })
         <ActionForm action={saveMailSettings.bind(null, a.id)} className="mt-3 grid gap-4 sm:grid-cols-[1fr_8rem]">
           <Field label="Name people see"><Input name="from_name" defaultValue={a.from_name ?? fallbackName} /></Field>
           <Field label="Max emails / day"><Input name="daily_limit" type="number" min={1} max={40} defaultValue={a.daily_limit} /></Field>
+          {a.bcc_email !== undefined && (
+            <Field label="BCC a copy of every outreach email to (optional)" className="sm:col-span-2">
+              <Input name="bcc_email" type="email" defaultValue={a.bcc_email ?? ""} placeholder="e.g. your partner's address" />
+              <p className="mt-1 text-xs text-muted-foreground">They get a hidden copy of each scheduled or approved email from this inbox; the lead never sees it.</p>
+            </Field>
+          )}
           <Field label="Signature (required: your name and a real postal address; the law requires the address in every email)" className="sm:col-span-2">
             <Textarea name="signature" rows={4} defaultValue={a.signature ?? ""} placeholder={SIGNATURE_EXAMPLE} required />
             <p className="mt-1 text-xs text-muted-foreground">Added under every email from this inbox, followed by: Not interested? Reply &quot;no&quot; and I won&apos;t email again.</p>

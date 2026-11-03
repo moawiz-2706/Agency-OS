@@ -173,7 +173,7 @@ export async function sendDirect(s: ImapSettings, m: DirectMail) {
 }
 
 /** Send over SMTP, then file a copy in Sent like a normal mail app would (SMTP alone doesn't). */
-export async function sendImap(c: ImapFlow | null, s: ImapSettings, claim: ImapClaim) {
+export async function sendImap(c: ImapFlow | null, s: ImapSettings, claim: ImapClaim, bcc: string | null = null) {
   const messageId = `<${randomUUID()}@${s.email.split("@")[1]}>`;
   const mime = buildMime({
     from_email: claim.from_email, from_name: claim.from_name, to: claim.to, to_name: claim.to_name, subject: claim.subject,
@@ -181,7 +181,8 @@ export async function sendImap(c: ImapFlow | null, s: ImapSettings, claim: ImapC
     message_id: messageId, date: new Date(), unsubscribe_url: claim.unsubscribe_url,
   });
   try {
-    await smtpTransport(s).sendMail({ envelope: { from: s.email, to: [claim.to] }, raw: mime });
+    // A BCC copy rides in the envelope only, so it never shows in the message.
+    await smtpTransport(s).sendMail({ envelope: { from: s.email, to: bcc ? [claim.to, bcc] : [claim.to] }, raw: mime });
   } catch (e) {
     if (isAuthFailure(e)) throw new MailAuthError(`${s.email}: the mail server refused to send with this password. Reconnect it.`);
     throw e;
