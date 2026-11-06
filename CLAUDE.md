@@ -32,7 +32,7 @@ audit, research and offer recommendations, a team CRM, and email outreach with r
 | `supabase/migrations` | SQL migrations `0001`–`0007`, all **applied on live** |
 | `supabase/test` | Database tests on PGlite (real Postgres in WASM) with Supabase auth stand-ins (`harness.mjs`) |
 | `web/` | Standalone **npm** Next.js 16 app (not part of the pnpm workspace): React 19, Tailwind v4, shadcn/ui, `@supabase/ssr`. Deployed on Vercel from `main` (root dir `web`) |
-| `docs/GO-LIVE.md`, `docs/GMAIL.md`, `docs/WEB-FORM.md` | Setup guides (database, auth, deploy; email inboxes; website form embed) |
+| `docs/GO-LIVE.md`, `docs/GMAIL.md`, `docs/WEB-FORM.md`, `docs/WARMUP.md` | Setup guides (database, auth, deploy; email inboxes; website form embed; warming up the GoDaddy domain) |
 | `docs/research/` | External-AI research workflow: prompt, CSV template, how to import |
 | `data/` (gitignored) | Lead CSVs, research results, outreach sequences/plans. Not in git: copy it separately |
 
