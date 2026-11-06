@@ -20,6 +20,8 @@ const OVERLAP_MS = 10 * 60_000;    // re-read the last 10 minutes so nothing sli
 type Account = {
   id: string; member_id: string; email: string; provider: "gmail" | "imap" | "microsoft"; from_name: string | null; token: string;
   synced_until: string | null; imap_host: string | null; imap_port: number | null; smtp_host: string | null; smtp_port: number | null;
+  /** Gets a hidden copy of every outreach email from this inbox (migration 0013; undefined before it runs). */
+  bcc_email?: string | null;
 };
 type Claim = {
   id: string; to: string; to_name: string | null; subject: string; body: string; thread_id: string | null;
@@ -139,7 +141,7 @@ async function runImap(rpc: Rpc, a: Account, send: boolean, report: MailRunRepor
   try {
     c = await openImap(s);
     report.synced = await syncImap(c, s, sinceOf(a), match(rpc, a.id), save(rpc, a.id));
-    if (send) report.sent = await sendNext(rpc, a.id, (claim) => sendImap(c, s, claim), (e) => e instanceof MailAuthError);
+    if (send) report.sent = await sendNext(rpc, a.id, (claim) => sendImap(c, s, claim, a.bcc_email ?? null), (e) => e instanceof MailAuthError);
   } finally {
     await c?.logout().catch(() => {});
   }
@@ -193,7 +195,7 @@ async function runGmail(rpc: Rpc, a: Account, send: boolean, report: MailRunRepo
       const raw = buildRaw({
         from_email: c.from_email, from_name: c.from_name, to: c.to, to_name: c.to_name,
         subject: c.subject, body: c.body, signature: c.signature, in_reply_to: c.in_reply_to, references: c.references,
-        unsubscribe_url: c.unsubscribe_url,
+        unsubscribe_url: c.unsubscribe_url, bcc: a.bcc_email ?? null,
       });
       const sent = await sendRaw(access, raw, c.thread_id);
       const meta = await getMessage(access, sent.id, "metadata").catch(() => null);

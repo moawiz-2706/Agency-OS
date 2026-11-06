@@ -21,15 +21,17 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
   const { reset, mail, reason } = await searchParams;
   const { member } = await currentMember();
   const supabase = await supabaseServer();
-  const [{ data: { user } }, mailRes, sendingRes, pauseRes, checks, bookingRes] = await Promise.all([
+  const [{ data: { user } }, mailRes, sendingRes, pauseRes, checks, bookingRes, { data: bccRows, error: bccError }] = await Promise.all([
     supabase.auth.getUser(),
     supabase.rpc("my_mail_accounts"),
     supabase.rpc("sending_enabled"),
     supabase.rpc("sending_pause_info"),   // missing until migration 0008 runs: then just no note
     mailSetupCheck(await headers()),
     supabase.rpc("booking_url"),   // missing until migration 0012 runs
+    supabase.rpc("my_inbox_bcc"),   // missing until migration 0013 runs: the BCC field stays hidden
   ]);
-  const mailAccounts = (mailRes.data as MailAccountRow[] | null) ?? [];
+  const bcc = new Map(((bccRows ?? []) as { id: string; bcc_email: string | null }[]).map((r) => [r.id, r.bcc_email]));
+  const mailAccounts = ((mailRes.data as MailAccountRow[] | null) ?? []).map((a) => (bccError ? a : { ...a, bcc_email: bcc.get(a.id) ?? null }));
   const providers = new Set((user?.identities ?? []).map((i) => i.provider));
 
   return (
