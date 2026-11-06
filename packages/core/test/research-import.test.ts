@@ -112,6 +112,18 @@ test("re-importing updates the existing report, adds no duplicate contacts or to
   assert.equal(p.company.patch.stage, undefined, "already past new: stage untouched");
 });
 
+test("an email we already have is confirmed, not duplicated: research can unlock its consent", () => {
+  const known = { contactEmails: new Set(["office@acme.example"]) };
+  const us = ok(planResearchRow(row(), ctx(known), "f"));
+  assert.ok(us.contacts.every((c) => c.email !== "office@acme.example"));
+  assert.deepEqual(us.consent, [{ email: "office@acme.example", consent_basis: "can_spam_b2b", source_url: row().email_source_url, do_not_contact: false }]);
+  const ca = ctx({ ...known, company: { ...COMPANY, country: "CA" } });
+  assert.equal(ok(planResearchRow(row(), ca, "f")).consent[0].consent_basis, "casl_implied_published");
+  assert.equal(ok(planResearchRow(row({ no_unsolicited_email_notice: "yes" }), ca, "f")).consent[0].do_not_contact, true);
+  // Not shown on their own site: nothing to confirm.
+  assert.deepEqual(ok(planResearchRow(row({ email_on_own_site: "no" }), ctx(known), "f")).consent, []);
+});
+
 test("closed businesses are disqualified with a note; won leads are left alone", () => {
   const closed = row({ status: "closed", gap_1: "", gap_2: "", fit_score: "0" });
   const p = ok(planResearchRow(closed, ctx({ company: { ...COMPANY, stage: "contacted" } }), "f"));

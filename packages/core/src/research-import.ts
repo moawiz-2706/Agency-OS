@@ -45,6 +45,9 @@ export type NewContact = {
   source: string; consent_basis: ConsentBasis; email_published_publicly: boolean; do_not_contact: boolean;
 };
 
+/** Research confirmed an address we already had is published on the business's own site. */
+export type ConsentConfirmation = { email: string; consent_basis: ConsentBasis; source_url: string; do_not_contact: boolean };
+
 export type RowPlan =
   | { kind: "skip"; lead_id: string; reason: string }
   | { kind: "reject"; lead_id: string; reason: string }
@@ -56,6 +59,8 @@ export type RowPlan =
       report: ResearchReport & { created_by: string | null };
       company: { id: string; patch: Record<string, unknown> };
       contacts: NewContact[];
+      /** Existing contacts whose consent the research now backs up (only ever raised from "unknown"). */
+      consent: ConsentConfirmation[];
       note?: string;
       touch: boolean;
       dropped_gaps: string[];
@@ -171,11 +176,18 @@ export function planResearchRow(row: ResultRow, ctx: RowContext, sourceName: str
   // Some tools list several addresses ("office@x.ca|jeremy@x.ca"): use the first valid one.
   const email = clean(row.best_email).toLowerCase().split(/[|;,\s]+/).find(isValidEmailSyntax) ?? "";
   const emailUrl = clean(row.email_source_url);
-  if (email && yes(row.email_on_own_site) && isUrl(emailUrl) && isValidEmailSyntax(email) && !ctx.contactEmails.has(email)) {
-    const noSpam = yes(row.no_unsolicited_email_notice);
-    const basis: ConsentBasis = c.country === "US"
-      ? "can_spam_b2b"
-      : c.country === "CA" && no(row.no_unsolicited_email_notice) ? "casl_implied_published" : "unknown";
+  const consent: ConsentConfirmation[] = [];
+  const published = email && yes(row.email_on_own_site) && isUrl(emailUrl) && isValidEmailSyntax(email);
+  const noSpam = yes(row.no_unsolicited_email_notice);
+  // US: business cold email is allowed (CAN-SPAM). Canada: only when the address is published on their own
+  // site with no "no unsolicited email" notice (CASL implied consent by conspicuous publication).
+  const basis: ConsentBasis = c.country === "US"
+    ? "can_spam_b2b"
+    : c.country === "CA" && no(row.no_unsolicited_email_notice) ? "casl_implied_published" : "unknown";
+  if (published && ctx.contactEmails.has(email)) {
+    consent.push({ email, consent_basis: basis, source_url: emailUrl, do_not_contact: noSpam });
+  }
+  if (published && !ctx.contactEmails.has(email)) {
     contacts.push({
       company_id: c.id, full_name: null, role: null, email, source_url: emailUrl, source: `research:${sourceName}`,
       consent_basis: basis, email_published_publicly: true, do_not_contact: noSpam,
@@ -201,6 +213,7 @@ export function planResearchRow(row: ResultRow, ctx: RowContext, sourceName: str
     report: { ...parsed.data, created_by: ctx.ownerMemberId },
     company: { id: c.id, patch },
     contacts,
+    consent,
     note,
     touch: !ctx.existingReportId,   // one research touch per lead, not one per import
     dropped_gaps: dropped,
@@ -333,6 +346,14 @@ export async function importResearchCsv(text: string, opts: { sourceName: string
       }
       if (Object.keys(p.company.patch).length) must(await db().from("companies").update(p.company.patch).eq("id", p.company.id));
       if (p.contacts.length) must(await db().from("contacts").insert(p.contacts));
+      for (const k of p.consent) {
+        // Raise consent only from "unknown" (never overwrite one set by hand); a "no unsolicited email" notice always wins.
+        if (k.consent_basis !== "unknown") {
+          must(await db().from("contacts").update({ consent_basis: k.consent_basis, email_published_publicly: true, source_url: k.source_url })
+            .eq("company_id", p.company.id).ilike("email", k.email).eq("consent_basis", "unknown"));
+        }
+        if (k.do_not_contact) must(await db().from("contacts").update({ do_not_contact: true }).eq("company_id", p.company.id).ilike("email", k.email));
+      }
       if (p.note) must(await db().from("notes").insert({ company_id: p.company.id, member_id: owner?.id ?? null, body: p.note }));
     }
   }
@@ -348,6 +369,7 @@ export async function importResearchCsv(text: string, opts: { sourceName: string
     skipped: plans.filter((p) => p.kind === "skip") as Extract<RowPlan, { kind: "skip" }>[],
     rejected: plans.filter((p) => p.kind === "reject") as Extract<RowPlan, { kind: "reject" }>[],
     contacts_added: ok.reduce((n, p) => n + p.contacts.length, 0),
+    consent_confirmed: ok.reduce((n, p) => n + p.consent.filter((k) => k.consent_basis !== "unknown").length, 0),
     do_not_contact: ok.reduce((n, p) => n + p.contacts.filter((c) => c.do_not_contact).length, 0),
     disqualified: ok.filter((p) => p.note).map((p) => p.lead_id),
     notes: ok.flatMap((p) => [...p.dropped_gaps.map((d) => `${p.lead_id}: dropped ${d}`), ...p.warnings.map((w) => `${p.lead_id}: ${w}`)]),

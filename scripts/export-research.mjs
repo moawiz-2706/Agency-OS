@@ -1,6 +1,8 @@
 // Write lead batches for external AI research (docs/research/README.md).
 //
 // Usage: node scripts/export-research.mjs [--limit 200] [--batch-size 20] [--include-researched]
+//        [--country US|CA]   only leads in that country (US first is easiest to email: CAN-SPAM)
+//        [--single]          one file, data/research/leads_<date>.csv, for tools that take a whole list (Manus)
 //
 // Writes data/research/batches/batch_NN.csv (the columns RESEARCH_PROMPT.md expects)
 // and _hints.csv (audit signals + top recommended offer per lead). Leads without a
@@ -19,6 +21,10 @@ const opt = (name, fallback) => {
 const limit = opt("limit", 200);
 const batchSize = opt("batch-size", 20);
 const includeResearched = args.includes("--include-researched");
+const single = args.includes("--single");
+const countryArg = args.find((a, i) => args[i - 1] === "--country" || a.startsWith("--country="));
+const country = countryArg ? countryArg.replace(/^--country=/, "").toUpperCase() : null;
+if (country && !["US", "CA"].includes(country)) { console.error("--country must be US or CA"); process.exit(1); }
 if (!(limit > 0) || !(batchSize > 0)) {
   console.error("Usage: node scripts/export-research.mjs [--limit 200] [--batch-size 20] [--include-researched]");
   process.exit(1);
@@ -37,6 +43,8 @@ const researched = new Set((await selectAll(() => db.from("research_reports").se
 
 const picked = companies
   .filter((c) => includeResearched || !researched.has(c.id))
+  .filter((c) => !country || c.country === country)
+  .filter((c) => !["won", "lost"].includes(c.stage))
   .sort((a, b) =>
     Number(researched.has(a.id)) - Number(researched.has(b.id))   // not yet researched first
     || Number(!a.website) - Number(!b.website)                     // then leads with a website
@@ -67,12 +75,21 @@ mkdirSync(outDir, { recursive: true });
 for (const f of readdirSync(outDir)) if (/^batch_\d+\.csv$|^_hints\.csv$/.test(f)) rmSync(path.join(outDir, f));
 
 const BATCH_COLS = ["lead_id", "name", "trade", "website", "phone", "email", "city", "state_province", "country", "facebook", "instagram"];
+const row = (c) => [c.lead_ref, c.name, c.trade, c.website, c.phone, c.email, c.city, c.region, c.country, c.facebook, c.instagram];
+if (single) {
+  const file = path.join(root, "data", "research", `leads_${new Date().toISOString().slice(0, 10)}_${picked.length}.csv`);
+  mkdirSync(path.dirname(file), { recursive: true });
+  writeFileSync(file, csv(BATCH_COLS, picked.map(row)));
+  console.log(`Exported ${picked.length} lead(s)${country ? ` in ${country}` : ""} to ${path.relative(root, file)}
+  ${picked.filter((c) => c.website).length} with a website. Next: docs/research/MANUS_PROMPT.md.`);
+  process.exit(0);
+}
 const batches = chunk(picked, batchSize);
 const pad = String(batches.length).length < 2 ? 2 : String(batches.length).length;
 batches.forEach((rows, i) => {
   const file = `batch_${String(i + 1).padStart(pad, "0")}.csv`;
   writeFileSync(path.join(outDir, file), csv(BATCH_COLS, rows.map((c) =>
-    [c.lead_ref, c.name, c.trade, c.website, c.phone, c.email, c.city, c.region, c.country, c.facebook, c.instagram])));
+    row(c))));
 });
 
 const HINT_COLS = ["lead_id", "audit", "online_booking", "chat", "text_us", "ad_pixels", "uses_ghl", "booking_tools", "mobile_friendly", "copyright_year", "top_offer", "offer_reasons"];

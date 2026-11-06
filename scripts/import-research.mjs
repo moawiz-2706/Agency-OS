@@ -36,6 +36,7 @@ imported:        ${r.imported}${r.repaired ? `  (${r.repaired} of them realigned
 updated:         ${r.updated}${r.updated ? "  (re-import: latest external research replaced)" : ""}
 skipped:         ${r.skipped.length}${r.skipped.length ? "\n" + list(r.skipped, (s) => `${s.lead_id}: ${s.reason}`) : ""}
 rejected:        ${r.rejected.length}${r.rejected.length ? "\n" + list(r.rejected, (s) => `${s.lead_id}: ${s.reason}`) : ""}
+consent confirmed on emails already in the CRM: ${r.consent_confirmed}
 contacts added:  ${r.contacts_added}${r.do_not_contact ? `  (${r.do_not_contact} marked do-not-contact: "no unsolicited email" notice)` : ""}
 disqualified:    ${r.disqualified.length}${r.disqualified.length ? `  (closed per research: ${r.disqualified.join(", ")})` : ""}`);
 if (r.notes.length) console.log(`\nnotes:\n${list(r.notes, (n) => n)}`);
