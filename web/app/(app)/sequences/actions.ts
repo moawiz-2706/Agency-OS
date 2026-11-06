@@ -6,6 +6,7 @@ import { supabaseServer } from "@/lib/supabase/server";
 import { STAGES } from "@/lib/crm";
 import { stepProblems, type Step } from "@/lib/sequences";
 import type { ActionResult } from "@/lib/action-result";
+import { LIBRARY } from "@/lib/email-library";
 
 // Sequences run as the signed-in user: RLS lets team members edit them, and the
 // database functions (migration 0010) create the drafts and check every contact.
@@ -52,19 +53,30 @@ const STARTER: Step[] = [
   },
 ];
 
-export async function createSequence(form: FormData) {
-  const name = str(form, "name");
-  if (!name) throw new Error("Give the sequence a name");
+async function insertSequence(name: string, description: string | null, steps: Step[]) {
   const supabase = await supabaseServer();
   const { data: templates } = await check(supabase.from("templates")
-    .insert(STARTER.map((s, i) => ({ name: `${name} · step ${i + 1}`, step: i + 1, subject: s.subject, body: s.body })))
+    .insert(steps.map((s, i) => ({ name: `${name} · step ${i + 1}`, step: i + 1, subject: s.subject, body: s.body })))
     .select("id,step"));
   const ordered = (templates ?? []).sort((a, b) => a.step - b.step);
   const { data } = await check(supabase.from("campaigns").insert({
-    name, description: str(form, "description"), template_ids: ordered.map((t) => t.id), step_days: STARTER.map((s) => s.day),
+    name, description, template_ids: ordered.map((t) => t.id), step_days: steps.map((s) => s.day),
   }).select("id").single());
   revalidatePath("/sequences");
   redirect(`/sequences/${data!.id}`);
+}
+
+export async function createSequence(form: FormData) {
+  const name = str(form, "name");
+  if (!name) throw new Error("Give the sequence a name");
+  await insertSequence(name, str(form, "description"), STARTER);
+}
+
+/** A new sequence from one of the ready-made templates (Templates page); edit it, then add leads. */
+export async function createSequenceFromLibrary(key: string) {
+  const t = LIBRARY.find((x) => x.key === key);
+  if (!t) throw new Error("Unknown template");
+  await insertSequence(t.name, `Template: ${t.bestFor}`, t.steps);
 }
 
 export async function saveSequence(id: string, form: FormData): Promise<ActionResult> {
