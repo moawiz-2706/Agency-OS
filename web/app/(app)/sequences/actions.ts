@@ -41,7 +41,8 @@ const STARTER: Step[] = [
   },
   {
     day: 4, subject: "",
-    body: "Hi {{first_name}}, quick follow-up.\n\nOne roofing client of ours booked 6 extra jobs in the first month just from missed-call texts. "
+    body: "Hi {{first_name}}, quick follow-up.\n\nTo make it concrete: someone calls while your team is on a job. A minute later they get a text "
+      + "asking what they need, reply right away, and you pick it up when you're free instead of losing them to voicemail. "
       + "Happy to show you how it would work for {{company}}.\n\n{{my_name}}",
   },
   {

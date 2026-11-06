@@ -39,14 +39,15 @@ ${offers}
 For **every** lead, write a sequence of **${days.length} emails**, sent on days **${days.join(", ")}**:
 1. **Email 1:** a specific observation about their business (from \`issues_found\` / \`personal_hook\`), what it likely costs them
    (missed calls, slow replies, lost bookings…), the one fix we'd set up, and a low-pressure question (e.g. "worth a 15-minute look?").
-${days.length > 1 ? `2. **Follow-ups (emails 2–${days.length}):** each adds something new: a different angle from their issues, a short result
-   ("a roofing client booked 6 extra jobs in month one from missed-call texts"), or a simpler ask. The last one is a polite
-   "should I close the loop?" note.` : ""}
+${days.length > 1 ? `2. **Follow-ups (emails 2–${days.length}):** each adds something new: a different angle from their issues, a concrete
+   picture of how the fix works for them ("someone calls while you're on a roof; a minute later they get a text…"), or a
+   simpler ask (e.g. offer a short video). The last one is a polite "should I close the loop?" note.` : ""}
 
 ## Rules
 - Plain text only. **No links, no images, no attachments**, no tracking. Email 1 under 120 words, follow-ups under 80.
 - **No signature, no sign-off name, no unsubscribe line.** We add the signature, postal address and opt-out line ourselves.
-- Only use facts from the CSV. Never invent numbers, reviews, competitors or names. If an issue isn't in the CSV, don't mention it.
+- Only use facts from the CSV. Never invent numbers, reviews, competitors, names, **client results or case studies**
+  (we have no published results yet, so don't claim any). If an issue isn't in the CSV, don't mention it.
 - Sound like a person: short sentences, no hype, no "I hope this email finds you well", no exclamation marks, no emojis.
 - Subject lines: 2–6 words, lower case, specific to them (e.g. "missed calls at swift?"). Leave the subject **empty** for
   follow-ups: they're sent as replies in the same thread.
