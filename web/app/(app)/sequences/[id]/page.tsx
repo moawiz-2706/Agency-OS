@@ -48,6 +48,9 @@ export default async function SequencePage({ params }: { params: Promise<{ id: s
   ]);
   if (!cp) notFound();
   const c = cp as Campaign;
+  // The design column arrives with migration 0015; before that the choice is hidden.
+  const { data: designRow, error: designErr } = await supabase.from("campaigns").select("design").eq("id", id).maybeSingle();
+  const design = designErr ? undefined : ((designRow as { design: string | null } | null)?.design ?? "outreach");
   const tplRes = c.template_ids.length ? await supabase.from("templates").select("id,subject,body").in("id", c.template_ids) : null;
   const tpl = new Map(((tplRes?.data ?? []) as { id: string; subject: string; body: string }[]).map((t) => [t.id, t]));
   const steps = c.template_ids.map((tid, i) => ({
@@ -114,7 +117,7 @@ export default async function SequencePage({ params }: { params: Promise<{ id: s
             <CardDescription>Each step is one email. Later steps without a subject go as a reply in the same thread. A reply, bounce or unsubscribe stops the rest for that lead.</CardDescription>
           </CardHeader>
           <CardContent>
-            <SequenceEditor id={id} name={c.name} description={c.description} sendTime={c.send_time} skipWeekends={c.skip_weekends} steps={steps} sample={sample} />
+            <SequenceEditor id={id} name={c.name} description={c.description} sendTime={c.send_time} skipWeekends={c.skip_weekends} design={design} steps={steps} sample={sample} />
           </CardContent>
         </Card>
 

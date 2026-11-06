@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { ImapFlow } from "imapflow";
 import nodemailer from "nodemailer";
 import { addresses, buildMime, imapThreadId, type SyncMessage } from "./message.ts";
-import type { EmailDesign } from "./design.ts";
+import type { Outgoing } from "./message.ts";
 import { imapToSync } from "./imap-parse.ts";
 
 // Inboxes that use plain IMAP (read) + SMTP (send) with the mailbox password:
@@ -174,12 +174,15 @@ export async function sendDirect(s: ImapSettings, m: DirectMail) {
 }
 
 /** Send over SMTP, then file a copy in Sent like a normal mail app would (SMTP alone doesn't). */
-export async function sendImap(c: ImapFlow | null, s: ImapSettings, claim: ImapClaim, bcc: string | null = null, design: EmailDesign | null = null) {
+/** How the email looks: the outreach design, or the marketing one (see message.ts). */
+export type Look = Pick<Outgoing, "design" | "marketing">;
+
+export async function sendImap(c: ImapFlow | null, s: ImapSettings, claim: ImapClaim, bcc: string | null = null, look: Look = {}) {
   const messageId = `<${randomUUID()}@${s.email.split("@")[1]}>`;
   const mime = buildMime({
     from_email: claim.from_email, from_name: claim.from_name, to: claim.to, to_name: claim.to_name, subject: claim.subject,
     body: claim.body, signature: claim.signature, in_reply_to: claim.in_reply_to, references: claim.references,
-    message_id: messageId, date: new Date(), unsubscribe_url: claim.unsubscribe_url, design,
+    message_id: messageId, date: new Date(), unsubscribe_url: claim.unsubscribe_url, ...look,
   });
   try {
     // A BCC copy rides in the envelope only, so it never shows in the message.

@@ -112,6 +112,87 @@ const FONTS: Record<EmailFont, string> = {
 
 export type Rendered = { text: string; html: string | null };
 
+// ---------- the marketing design (migration 0015) ----------
+// For people who know you (past leads, newsletters, offers): a branded header, the
+// message, ONE button and a footer. Not for first cold emails: use the outreach design.
+
+export type MarketingDesign = { header: string; tagline: string; cta_text: string; cta_url: string | null; accent: string };
+export type EmailKind = "outreach" | "marketing";
+
+export const DEFAULT_MARKETING: MarketingDesign = {
+  header: "THE SENTINEL SYSTEMS", tagline: "Business Automation · CRM · AI Solutions",
+  cta_text: "Book a free consultation", cta_url: null, accent: "#1d4ed8",
+};
+
+export function normalizeMarketing(v: unknown): MarketingDesign {
+  const o = (v && typeof v === "object" ? v : {}) as Record<string, unknown>;
+  const s = (k: string, max: number, d: string) => (typeof o[k] === "string" ? (o[k] as string).replace(/[\r\n]+/g, " ").trim().slice(0, max) : d);
+  const url = typeof o.cta_url === "string" && /^https:\/\/\S+$/.test(o.cta_url.trim()) ? o.cta_url.trim() : null;
+  return {
+    header: s("header", 60, DEFAULT_MARKETING.header) || DEFAULT_MARKETING.header,
+    tagline: s("tagline", 100, DEFAULT_MARKETING.tagline),
+    cta_text: s("cta_text", 40, DEFAULT_MARKETING.cta_text),
+    cta_url: url,
+    accent: typeof o.accent === "string" && /^#[0-9a-f]{6}$/i.test(o.accent) ? o.accent : DEFAULT_MARKETING.accent,
+  };
+}
+
+/** The first https link in the signature (the website), for the footer. */
+const siteOf = (signature: string) => signature.match(URL_RE)?.[0] ?? null;
+
+export type MarketingExtras = { sign_off?: string; booking_url?: string | null; from_email?: string | null; unsubscribe_url?: string | null };
+
+export function renderMarketing(body: string, signature: string | null | undefined, mk: MarketingDesign, x: MarketingExtras = {}): Rendered {
+  const sig = (signature ?? "").trim();
+  const message = withSignOff(body, x.sign_off ?? "Best regards,", sig);
+  const site = siteOf(sig);
+  // The button goes to the design's link, else the booking link (Account), else the website in the signature.
+  const ctaUrl = mk.cta_url ?? x.booking_url ?? site;
+  const cta = mk.cta_text && ctaUrl ? { text: mk.cta_text, url: ctaUrl } : null;
+
+  const textParts = [body.replace(/\r\n?/g, "\n").trim()];
+  if (cta) textParts.push(`${cta.text}: ${cta.url}`);
+  const text = composeText([...textParts, message.slice(body.replace(/\r\n?/g, "\n").trim().length).trim()].filter(Boolean).join("\n\n"), sig);
+
+  const d: EmailDesign = { style: "branded", accent: mk.accent, sign_off: "", font: "sans" };
+  const button = cta ? `
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:22px 0 24px;"><tr>
+<td style="border-radius:6px;background:${mk.accent};"><a href="${esc(cta.url)}" style="display:inline-block;padding:12px 24px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:6px;">${esc(cta.text)}</a></td>
+</tr></table>` : "";
+  // Split the sign-off off the message so the button sits between the message and "Best regards,".
+  const bodyHtml = bodyToHtml(body, mk.accent);
+  const signOffHtml = message.length > body.trim().length ? bodyToHtml(message.slice(body.replace(/\r\n?/g, "\n").trim().length).trim(), mk.accent) : "";
+  const links = [
+    site && `<a href="${esc(site)}" style="color:#6b7280;text-decoration:underline;">Website</a>`,
+    x.from_email && `<a href="mailto:${esc(x.from_email)}" style="color:#6b7280;text-decoration:underline;">Contact</a>`,
+    x.unsubscribe_url && `<a href="${esc(x.unsubscribe_url)}" style="color:#6b7280;text-decoration:underline;">Unsubscribe</a>`,
+  ].filter(Boolean).join(" &nbsp;·&nbsp; ");
+  const optOut = HAS_OPT_OUT.test(`${message}\n${sig}`) ? "" : OPT_OUT_LINE;
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f5f7;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f4f5f7;"><tr><td align="center" style="padding:24px 12px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background:#ffffff;border-radius:8px;border-top:4px solid ${mk.accent};">
+<tr><td style="padding:24px 32px 8px;font-family:Arial,Helvetica,sans-serif;">
+<div style="font-size:20px;font-weight:bold;letter-spacing:1.5px;color:${mk.accent};">${esc(mk.header)}</div>
+${mk.tagline ? `<div style="margin-top:4px;font-size:13px;color:#6b7280;">${esc(mk.tagline)}</div>` : ""}
+</td></tr>
+<tr><td style="padding:16px 32px 8px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;color:#1f2937;">
+${bodyHtml}
+${button}
+${signOffHtml}
+${sig ? signatureHtml(sig, d) : ""}
+</td></tr>
+<tr><td style="padding:16px 32px 24px;border-top:1px solid #e5e7eb;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.6;color:#9ca3af;">
+${links ? `<div>${links}</div>` : ""}
+${optOut ? `<div style="margin-top:4px;">${esc(optOut)}</div>` : ""}
+</td></tr>
+</table>
+</td></tr></table>
+</body></html>`;
+  return { text, html };
+}
+
 /**
  * What goes out for one email. `plain` (or no design: before migration 0014) keeps the
  * old text-only email. Otherwise the HTML and the text say exactly the same thing.

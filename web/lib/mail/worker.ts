@@ -5,9 +5,9 @@ import { decryptToken } from "./crypto.ts";
 import { envValue, publicOrigin } from "./env.ts";
 import { unsubscribeUrl } from "./unsubscribe.ts";
 import { GoogleAuthError, accessToken, getMessage, listMessageIds, revokeToken, sendRaw } from "./google.ts";
-import { MailAuthError, openImap, sendDirect, sendImap, syncImap, type Brief, type ImapSettings } from "./imap.ts";
+import { MailAuthError, openImap, sendDirect, sendImap, syncImap, type Brief, type ImapSettings, type Look } from "./imap.ts";
 import { addresses, buildRaw, header, toSyncMessage, type SyncMessage } from "./message.ts";
-import { normalizeDesign, type EmailDesign } from "./design.ts";
+import { normalizeDesign, normalizeMarketing, type EmailDesign, type MarketingDesign } from "./design.ts";
 
 // One run for each connected inbox: sync it (your own sends, replies, bounces) into the
 // CRM, then send at most one due, approved email. Gmail inboxes use the Gmail API;
@@ -76,15 +76,33 @@ export async function runMail(opts: { memberId?: string; send?: boolean } = {}):
   return reports;
 }
 
-/** The team's email design; null (plain text, as before) until migration 0014 runs. */
-async function emailDesign(rpc: Rpc, needed: boolean): Promise<EmailDesign | null> {
-  if (!needed) return null;
+type Designs = { outreach: EmailDesign | null; marketing: MarketingDesign | null; booking_url: string | null };
+const NO_DESIGN: Designs = { outreach: null, marketing: null, booking_url: null };
+
+/** The team's email designs: both after migration 0015, the outreach one after 0014, else plain text. */
+async function emailDesign(rpc: Rpc, needed: boolean): Promise<Designs> {
+  if (!needed) return NO_DESIGN;
+  try {
+    const d = await rpc<{ outreach: unknown; marketing: unknown; booking_url: string | null }>("mailer_email_designs", {});
+    return {
+      outreach: d.outreach ? normalizeDesign(d.outreach) : null,
+      marketing: d.marketing ? normalizeMarketing(d.marketing) : null,
+      booking_url: d.booking_url ?? null,
+    };
+  } catch { /* before 0015 */ }
   try {
     const d = await rpc<unknown>("mailer_email_design", {});
-    return d ? normalizeDesign(d) : null;
+    return { ...NO_DESIGN, outreach: d ? normalizeDesign(d) : null };
   } catch {
-    return null;   // missing before migration 0014, or a hiccup: send plain text rather than not at all
+    return NO_DESIGN;   // missing before migration 0014, or a hiccup: send plain text rather than not at all
   }
+}
+
+/** The look for one claimed email: the marketing design when the email (or its sequence) asks for it. */
+async function lookFor(rpc: Rpc, id: string, d: Designs): Promise<Look> {
+  if (!d.marketing) return { design: d.outreach };
+  const kind = await rpc<string | null>("mailer_message_design", { p_message: id }).catch(() => null);
+  return kind === "marketing" ? { design: d.outreach, marketing: { design: d.marketing, booking_url: d.booking_url } } : { design: d.outreach };
 }
 
 /** null when MAILER_SECRET opens the database's mail functions, else what's wrong. */
@@ -150,13 +168,13 @@ async function sendNext(rpc: Rpc, accountId: string, send: (c: Claim & { unsubsc
 
 // ---------- GoDaddy and other IMAP/SMTP inboxes ----------
 
-async function runImap(rpc: Rpc, a: Account, send: boolean, report: MailRunReport, design: EmailDesign | null) {
+async function runImap(rpc: Rpc, a: Account, send: boolean, report: MailRunReport, design: Designs) {
   const s = imapSettings(a);
   let c: ImapFlow | null = null;
   try {
     c = await openImap(s);
     report.synced = await syncImap(c, s, sinceOf(a), match(rpc, a.id), save(rpc, a.id));
-    if (send) report.sent = await sendNext(rpc, a.id, (claim) => sendImap(c, s, claim, a.bcc_email ?? null, design), (e) => e instanceof MailAuthError);
+    if (send) report.sent = await sendNext(rpc, a.id, async (claim) => sendImap(c, s, claim, a.bcc_email ?? null, await lookFor(rpc, claim.id, design)), (e) => e instanceof MailAuthError);
   } finally {
     await c?.logout().catch(() => {});
   }
@@ -202,7 +220,7 @@ async function pool<T, R>(items: T[], size: number, fn: (x: T) => Promise<R>): P
   return out;
 }
 
-async function runGmail(rpc: Rpc, a: Account, send: boolean, report: MailRunReport, design: EmailDesign | null) {
+async function runGmail(rpc: Rpc, a: Account, send: boolean, report: MailRunReport, design: Designs) {
   const access = await accessToken(decryptToken(a.token, a.email));
   report.synced = await syncGmail(rpc, a, access);
   if (send) {
@@ -210,7 +228,7 @@ async function runGmail(rpc: Rpc, a: Account, send: boolean, report: MailRunRepo
       const raw = buildRaw({
         from_email: c.from_email, from_name: c.from_name, to: c.to, to_name: c.to_name,
         subject: c.subject, body: c.body, signature: c.signature, in_reply_to: c.in_reply_to, references: c.references,
-        unsubscribe_url: c.unsubscribe_url, bcc: a.bcc_email ?? null, design,
+        unsubscribe_url: c.unsubscribe_url, bcc: a.bcc_email ?? null, ...(await lookFor(rpc, c.id, design)),
       });
       const sent = await sendRaw(access, raw, c.thread_id);
       const meta = await getMessage(access, sent.id, "metadata").catch(() => null);
