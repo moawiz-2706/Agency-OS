@@ -53,7 +53,7 @@ const STARTER: Step[] = [
   },
 ];
 
-async function insertSequence(name: string, description: string | null, steps: Step[]) {
+async function insertSequence(name: string, description: string | null, steps: Step[], design: "outreach" | "marketing" = "outreach") {
   const supabase = await supabaseServer();
   const { data: templates } = await check(supabase.from("templates")
     .insert(steps.map((s, i) => ({ name: `${name} · step ${i + 1}`, step: i + 1, subject: s.subject, body: s.body })))
@@ -61,6 +61,7 @@ async function insertSequence(name: string, description: string | null, steps: S
   const ordered = (templates ?? []).sort((a, b) => a.step - b.step);
   const { data } = await check(supabase.from("campaigns").insert({
     name, description, template_ids: ordered.map((t) => t.id), step_days: steps.map((s) => s.day),
+    ...(design === "marketing" ? { design } : {}),   // the column comes with migration 0015
   }).select("id").single());
   revalidatePath("/sequences");
   redirect(`/sequences/${data!.id}`);
@@ -76,7 +77,7 @@ export async function createSequence(form: FormData) {
 export async function createSequenceFromLibrary(key: string) {
   const t = LIBRARY.find((x) => x.key === key);
   if (!t) throw new Error("Unknown template");
-  await insertSequence(t.name, `Template: ${t.bestFor}`, t.steps);
+  await insertSequence(t.name, `Template: ${t.bestFor}`, t.steps, t.design);
 }
 
 export async function saveSequence(id: string, form: FormData): Promise<ActionResult> {
@@ -109,6 +110,7 @@ export async function saveSequence(id: string, form: FormData): Promise<ActionRe
     await check(supabase.from("campaigns").update({
       name, description: str(form, "description"), template_ids: ids, step_days: steps.map((s) => s.day),
       send_time: time, skip_weekends: form.get("skip_weekends") === "on",
+      ...(["outreach", "marketing"].includes(str(form, "design") ?? "") ? { design: str(form, "design") } : {}),
     }).eq("id", id));
     revalidatePath(`/sequences/${id}`);
     return "Saved. Changes apply to leads you add from now on; drafts already made stay as they are.";

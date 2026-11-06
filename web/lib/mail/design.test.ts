@@ -74,3 +74,28 @@ test("every library sequence is valid and fits the templates table (max 4 steps)
     }
   }
 });
+
+test("the marketing design: header, one button, footer links, and the same words in the text part", async () => {
+  const { renderMarketing, DEFAULT_MARKETING, normalizeMarketing } = await import("./design.ts");
+  const r = renderMarketing("Hi Mike,\n\nHere's what we can help with:\n- Missed calls\n- Booking", SIG, DEFAULT_MARKETING,
+    { sign_off: "Best regards,", booking_url: "https://cal.test/book", from_email: "moawiz@x.test", unsubscribe_url: "https://app.test/u?x=1" });
+  assert.match(r.html!, /THE SENTINEL SYSTEMS/);
+  assert.equal((r.html!.match(/href="https:\/\/cal.test\/book"/g) ?? []).length, 1, "one button");
+  assert.ok(r.html!.indexOf("cal.test/book") < r.html!.indexOf("Best regards,"), "button sits above the sign-off");
+  assert.match(r.html!, /mailto:moawiz@x.test/);
+  assert.match(r.html!, /href="https:\/\/app.test\/u\?x=1"[^>]*>Unsubscribe/);
+  assert.match(r.text, /Book a free consultation: https:\/\/cal.test\/book\n\nBest regards,\n\nMoawiz Bin Ammar/);
+  assert.ok(r.text.endsWith(OPT_OUT_LINE));
+  // No booking link set: the button falls back to the website in the signature.
+  assert.match(renderMarketing("Hi", SIG, DEFAULT_MARKETING).html!, /href="https:\/\/thesentinelsystems.com"[^>]*>Book a free/);
+  assert.equal(normalizeMarketing({ cta_url: "http://insecure.test", header: "" }).cta_url, null);
+  assert.equal(normalizeMarketing({ header: "" }).header, DEFAULT_MARKETING.header);
+});
+
+test("with marketing set, the MIME message uses it", () => {
+  const mime = buildMime({ from_email: "a@b.test", to: "mike@x.test", subject: "Hi", body: "Hi Mike", signature: SIG, design: DEFAULT_DESIGN,
+    marketing: { design: { header: "ACME", tagline: "", cta_text: "Book", cta_url: "https://cal.test", accent: "#000000" } } });
+  const parts = mime.split(/--=_sentinel_\w+/);
+  const html = Buffer.from(parts[2].split("\r\n\r\n")[1].replace(/\r\n/g, ""), "base64").toString("utf8");
+  assert.match(html, /ACME/);
+});

@@ -8,7 +8,8 @@
 
 import type { Step } from "./sequences.ts";
 
-export type LibrarySequence = { key: string; name: string; offer: string; bestFor: string; steps: Step[] };
+/** "outreach" = the plain, personal cold-email design; "marketing" = branded header + button (for people who know you). */
+export type LibrarySequence = { key: string; name: string; offer: string; bestFor: string; design: "outreach" | "marketing"; steps: Step[] };
 
 export const EMAIL_RULES = [
   "Subject: 2 to 5 words, lower case, like an email from a colleague (\"missed calls at {{company}}\"). No \"free\", \"offer\" or \"!\".",
@@ -23,7 +24,7 @@ const S = (day: number, subject: string, body: string): Step => ({ day, subject,
 
 export const LIBRARY: LibrarySequence[] = [
   {
-    key: "missed_call", name: "Missed calls → text-back", offer: "missed_call_textback",
+    key: "missed_call", name: "Missed calls → text-back", offer: "missed_call_textback", design: "outreach",
     bestFor: "HVAC, plumbing, electrical: anyone who misses calls while on a job",
     steps: [
       S(1, "missed calls at {{company}}",
@@ -44,7 +45,7 @@ export const LIBRARY: LibrarySequence[] = [
     ],
   },
   {
-    key: "online_booking", name: "Online booking", offer: "online_booking",
+    key: "online_booking", name: "Online booking", offer: "online_booking", design: "outreach",
     bestFor: "Businesses where customers can only call or fill in a contact form",
     steps: [
       S(1, "booking at {{company}}",
@@ -64,7 +65,7 @@ export const LIBRARY: LibrarySequence[] = [
     ],
   },
   {
-    key: "speed_to_lead", name: "Instant reply to new leads", offer: "speed_to_lead",
+    key: "speed_to_lead", name: "Instant reply to new leads", offer: "speed_to_lead", design: "outreach",
     bestFor: "Businesses running Google, Local Services or Facebook ads",
     steps: [
       S(1, "your new leads",
@@ -83,7 +84,7 @@ export const LIBRARY: LibrarySequence[] = [
     ],
   },
   {
-    key: "reviews", name: "More Google reviews", offer: "review_automation",
+    key: "reviews", name: "More Google reviews", offer: "review_automation", design: "outreach",
     bestFor: "Good businesses with fewer than about 50 Google reviews",
     steps: [
       S(1, "{{company}} reviews",
@@ -99,7 +100,7 @@ export const LIBRARY: LibrarySequence[] = [
     ],
   },
   {
-    key: "ghl", name: "GoHighLevel tune-up", offer: "ghl_optimisation",
+    key: "ghl", name: "GoHighLevel tune-up", offer: "ghl_optimisation", design: "outreach",
     bestFor: "Businesses whose site already runs on GoHighLevel / LeadConnector",
     steps: [
       S(1, "your gohighlevel setup",
@@ -116,7 +117,7 @@ export const LIBRARY: LibrarySequence[] = [
     ],
   },
   {
-    key: "website", name: "Website + Google profile", offer: "website_gbp",
+    key: "website", name: "Website + Google profile", offer: "website_gbp", design: "outreach",
     bestFor: "Businesses with no website, a broken one or an outdated one",
     steps: [
       S(1, "{{company}} website",
@@ -129,6 +130,21 @@ export const LIBRARY: LibrarySequence[] = [
         "Hi {{first_name}},\n\nOne more point: your Google profile often gets more views than your website. Up-to-date photos, services and hours there bring in calls on their own.\n\nHappy to include that in the list. Interested?"),
       S(15, "",
         "Hi {{first_name}}, last note from me.\n\nIf the website isn't a priority right now, no problem. If it becomes one, just reply and I'll pick it up."),
+    ],
+  },
+  {
+    key: "services_overview", name: "Services overview (marketing)", offer: "missed_call_textback", design: "marketing",
+    bestFor: "Leads who already know you: replied, said \"not now\", or met you. Not for first cold emails",
+    steps: [
+      S(1, "Are slow follow-ups costing you customers?", "Hi {{first_name}},\n\nAre you losing potential customers because of slow follow-ups?\n\nWe help {{trade}} businesses automate customer communication, capture missed opportunities and run a smoother day.\n\nHere's what we can help {{company}} improve:\n- Reply to every missed call automatically\n- Follow up with new leads instantly\n- Book appointments online, with reminders\n- Keep every customer conversation in one place\n\nLet's explore what's possible for your business."),
+      S(7, "", "Hi {{first_name}}, a quick reminder in case this got buried.\n\nA 20-minute call is enough to see where {{company}} loses leads today and what we'd automate first. There's no cost and no obligation.\n\nPick a time that suits you below."),
+    ],
+  },
+  {
+    key: "nurture", name: "Seasonal check-in (marketing)", offer: "review_automation", design: "marketing",
+    bestFor: "Past leads in nurture, every couple of months",
+    steps: [
+      S(1, "3 quick wins for {{trade}} businesses this season", "Hi {{first_name}},\n\nThree small changes we see make a real difference for {{trade}} companies right now:\n- Text back every missed call within a minute, so the customer doesn't call the next company\n- Ask for a Google review the day the job is finished, while the customer is happy\n- Remind past customers when their next service is due\n\nEach one takes us about a day to set up. If you'd like any of them at {{company}}, book a short call below."),
     ],
   },
 ];

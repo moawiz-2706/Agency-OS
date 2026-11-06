@@ -1,7 +1,7 @@
 // Building outgoing emails and reading synced Gmail messages. No app imports, so
 // `node --test` can load it directly.
 
-import { composeText, renderEmail, type EmailDesign } from "./design.ts";
+import { composeText, renderEmail, renderMarketing, type EmailDesign, type MarketingDesign } from "./design.ts";
 
 export { OPT_OUT_LINE, composeText } from "./design.ts";
 
@@ -29,6 +29,8 @@ export type Outgoing = {
   bcc?: string | null;
   /** The team's email design (migration 0014). Missing or "plain": a text-only email, as before. */
   design?: EmailDesign | null;
+  /** Send in the marketing design instead (migration 0015): branded header, one button, footer. */
+  marketing?: { design: MarketingDesign; booking_url?: string | null } | null;
 };
 
 const b64 = (v: string) => Buffer.from(v.replace(/\r?\n/g, "\r\n"), "utf8").toString("base64").replace(/.{76}/g, "$&\r\n");
@@ -46,7 +48,11 @@ export function buildMime(m: Outgoing): string {
   if (m.in_reply_to) headers.push(`In-Reply-To: ${oneLine(m.in_reply_to)}`);
   if (m.references || m.in_reply_to) headers.push(`References: ${oneLine(m.references || m.in_reply_to!)}`);
   if (m.unsubscribe_url) headers.push(`List-Unsubscribe: <${oneLine(m.unsubscribe_url)}>`, "List-Unsubscribe-Post: List-Unsubscribe=One-Click");
-  const { text, html } = m.design ? renderEmail(m.body, m.signature, m.design) : { text: composeText(m.body, m.signature), html: null };
+  const { text, html } = m.marketing
+    ? renderMarketing(m.body, m.signature, m.marketing.design, {
+      sign_off: m.design?.sign_off, booking_url: m.marketing.booking_url, from_email: m.from_email, unsubscribe_url: m.unsubscribe_url,
+    })
+    : m.design ? renderEmail(m.body, m.signature, m.design) : { text: composeText(m.body, m.signature), html: null };
   headers.push("MIME-Version: 1.0");
   if (!html) {
     headers.push('Content-Type: text/plain; charset="UTF-8"', "Content-Transfer-Encoding: base64");

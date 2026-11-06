@@ -15,8 +15,10 @@ type EditStep = Step & { template_id: string | null; key: number };
 type Sample = Parameters<typeof previewMerge>[1] & { label: string };
 
 /** A sequence's name, timing and steps. Saving affects leads added afterwards. */
-export function SequenceEditor({ id, name, description, sendTime, skipWeekends, steps: initial, sample }: {
+export function SequenceEditor({ id, name, description, sendTime, skipWeekends, design, steps: initial, sample }: {
   id: string; name: string; description: string | null; sendTime: string; skipWeekends: boolean;
+  /** "outreach" | "marketing"; undefined until migration 0015 runs (then the choice is hidden). */
+  design?: string;
   steps: (Step & { template_id: string | null })[];
   sample: Sample | null;
 }) {
@@ -58,6 +60,15 @@ export function SequenceEditor({ id, name, description, sendTime, skipWeekends, 
         <div className="grid gap-1.5"><Label htmlFor="description">Who it&apos;s for (optional)</Label><Input id="description" name="description" defaultValue={description ?? ""} placeholder="e.g. Texas HVAC already on GHL" /></div>
         <div className="grid gap-1.5"><Label htmlFor="send_time">Send time (each lead&apos;s own time zone)</Label><Input id="send_time" name="send_time" type="time" defaultValue={sendTime.slice(0, 5)} required /></div>
         <label className="flex items-center gap-2 self-end pb-2 text-sm"><Checkbox name="skip_weekends" defaultChecked={skipWeekends} />Move emails off Saturdays and Sundays</label>
+        {design !== undefined && (
+          <div className="grid gap-1.5">
+            <Label htmlFor="design">Email design</Label>
+            <select id="design" name="design" defaultValue={design} className="h-9 rounded-md border bg-transparent px-3 text-sm shadow-xs">
+              <option value="outreach">Cold outreach: personal, no images (first emails)</option>
+              <option value="marketing">Marketing: branded header + booking button (people who know you)</option>
+            </select>
+          </div>
+        )}
       </div>
 
       <div className="rounded-lg border bg-muted/30 p-3">

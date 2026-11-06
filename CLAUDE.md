@@ -173,7 +173,14 @@ and excludes `*.test.ts`.
   reads it at send time (`mailer_email_design`), so emails already scheduled get the current design. Before 0014 runs: plain text.
 - `lib/mail/design.ts` (`renderEmail`) turns body + inbox signature into HTML (paragraphs, `- ` lists, links, sign-off, signature
   block, small opt-out line; no images or tracking) plus the same text as the plain part: `buildMime` sends multipart/alternative.
-- `lib/email-library.ts`: six ready-made 4-step sequences (one per offer) + the writing rules; "Use this" creates a normal sequence.
+- `lib/email-library.ts`: ready-made sequences (six cold outreach, two marketing) + the writing rules; "Use as a sequence" creates a normal sequence.
+- **Two designs (`0015`):** `settings('email_marketing')` (header, tagline, button text/link, colour; `renderMarketing`: header, body, one button,
+  sign-off, signature, footer Website · Contact · Unsubscribe). `outreach_messages.design` / `campaigns.design` = outreach | marketing (null =
+  outreach); the worker asks `mailer_message_design` per claimed email and reads both designs + booking link with `mailer_email_designs`.
+  Button link: the design's, else the booking link, else the website in the signature.
+- `/templates` tabs: **Scheduled emails** (every waiting email: edit text, replace with a library email merged for that lead, pick the design,
+  bulk-set design; `team_update_email`: the author or an owner, and an owner's edit of a teammate's approved email sends it back for their
+  approval), **Designs** (both, live preview), **Library**.
 
 ### AI email drafts (`/leads/ai-emails`, no migration)
 - Leads page button. Step 1 downloads `researched-leads-<date>.csv` (open leads with a research report and an emailable
