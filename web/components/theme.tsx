@@ -8,8 +8,9 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  // The contact form sits inside the public website, which is light: don't follow the visitor's dark mode there.
-  const forced = usePathname()?.startsWith("/forms/") ? "light" : undefined;
+  // The contact form and booking pages sit inside (or next to) the public website, which is light: don't follow the visitor's dark mode there.
+  const path = usePathname();
+  const forced = path?.startsWith("/forms/") || path?.startsWith("/book/") ? "light" : undefined;
   return <NextThemes attribute="class" defaultTheme="system" enableSystem forcedTheme={forced} disableTransitionOnChange>{children}</NextThemes>;
 }
 
