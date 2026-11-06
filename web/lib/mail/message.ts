@@ -1,17 +1,9 @@
 // Building outgoing emails and reading synced Gmail messages. No app imports, so
 // `node --test` can load it directly.
 
-/** Added to every email that doesn't already carry an opt-out line (CAN-SPAM / CASL). */
-export const OPT_OUT_LINE = 'Not interested? Reply "no" and I won\'t email again.';
-const HAS_OPT_OUT = /reply\s+["“']?(no|stop|unsubscribe)["”']?/i;
+import { composeText, renderEmail, type EmailDesign } from "./design.ts";
 
-/** The exact text that goes out: message, signature (name, postal address), opt-out line. */
-export function composeText(body: string, signature: string | null | undefined) {
-  const parts = [body.trim(), (signature ?? "").trim()].filter(Boolean);
-  let text = parts.join("\n\n");
-  if (!HAS_OPT_OUT.test(text)) text += `\n${OPT_OUT_LINE}`;
-  return text.replace(/\r\n?/g, "\n");
-}
+export { OPT_OUT_LINE, composeText } from "./design.ts";
 
 const oneLine = (v: string) => v.replace(/[\r\n]+/g, " ").trim();
 const isAscii = (v: string) => /^[\x20-\x7e]*$/.test(v);
@@ -35,9 +27,13 @@ export type Outgoing = {
   unsubscribe_url?: string | null;
   /** A hidden copy (Gmail only: Gmail delivers it and strips the header; SMTP puts it in the envelope instead). */
   bcc?: string | null;
+  /** The team's email design (migration 0014). Missing or "plain": a text-only email, as before. */
+  design?: EmailDesign | null;
 };
 
-/** The full RFC 5322 message. Plain text only: no tracking, no HTML. */
+const b64 = (v: string) => Buffer.from(v.replace(/\r?\n/g, "\r\n"), "utf8").toString("base64").replace(/.{76}/g, "$&\r\n");
+
+/** The full RFC 5322 message: plain text, plus the same message as HTML when a design is set. No tracking. */
 export function buildMime(m: Outgoing): string {
   const headers = [
     `From: ${mailbox(m.from_email, m.from_name)}`,
@@ -50,9 +46,17 @@ export function buildMime(m: Outgoing): string {
   if (m.in_reply_to) headers.push(`In-Reply-To: ${oneLine(m.in_reply_to)}`);
   if (m.references || m.in_reply_to) headers.push(`References: ${oneLine(m.references || m.in_reply_to!)}`);
   if (m.unsubscribe_url) headers.push(`List-Unsubscribe: <${oneLine(m.unsubscribe_url)}>`, "List-Unsubscribe-Post: List-Unsubscribe=One-Click");
-  headers.push("MIME-Version: 1.0", 'Content-Type: text/plain; charset="UTF-8"', "Content-Transfer-Encoding: base64");
-  const body = Buffer.from(composeText(m.body, m.signature).replace(/\n/g, "\r\n"), "utf8").toString("base64").replace(/.{76}/g, "$&\r\n");
-  return `${headers.join("\r\n")}\r\n\r\n${body}`;
+  const { text, html } = m.design ? renderEmail(m.body, m.signature, m.design) : { text: composeText(m.body, m.signature), html: null };
+  headers.push("MIME-Version: 1.0");
+  if (!html) {
+    headers.push('Content-Type: text/plain; charset="UTF-8"', "Content-Transfer-Encoding: base64");
+    return `${headers.join("\r\n")}\r\n\r\n${b64(text)}`;
+  }
+  const boundary = `=_sentinel_${crypto.randomUUID().replace(/-/g, "")}`;
+  headers.push(`Content-Type: multipart/alternative; boundary="${boundary}"`);
+  const part = (type: string, content: string) =>
+    `--${boundary}\r\nContent-Type: ${type}; charset="UTF-8"\r\nContent-Transfer-Encoding: base64\r\n\r\n${b64(content)}\r\n`;
+  return `${headers.join("\r\n")}\r\n\r\n${part("text/plain", text)}${part("text/html", html)}--${boundary}--\r\n`;
 }
 
 /** The message as Gmail's `raw` field (base64url). */

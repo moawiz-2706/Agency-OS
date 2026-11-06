@@ -168,6 +168,13 @@ and excludes `*.test.ts`.
   `{{first_name}} {{full_name}} {{company}} {{city}} {{trade}} {{website}} {{personal_line}}` (research hook) `{{my_name}}`;
   `lib/sequences.ts` mirrors it for previews and rejects unknown tags. Pausing sends approved emails back to approval.
 
+### Email design and template library (`0014`, `/templates`)
+- `settings('email_design')` = `{style: personal|branded|plain, accent, sign_off, font}`; owners set it (`set_email_design`), the worker
+  reads it at send time (`mailer_email_design`), so emails already scheduled get the current design. Before 0014 runs: plain text.
+- `lib/mail/design.ts` (`renderEmail`) turns body + inbox signature into HTML (paragraphs, `- ` lists, links, sign-off, signature
+  block, small opt-out line; no images or tracking) plus the same text as the plain part: `buildMime` sends multipart/alternative.
+- `lib/email-library.ts`: six ready-made 4-step sequences (one per offer) + the writing rules; "Use this" creates a normal sequence.
+
 ### AI email drafts (`/leads/ai-emails`, no migration)
 - Leads page button. Step 1 downloads `researched-leads-<date>.csv` (open leads with a research report and an emailable
   contact, no emails waiting; optionally already-emailed ones) and a prompt (`/api/leads/ai-export?file=prompt`,
