@@ -31,9 +31,9 @@ type Claim = {
 type Sent = { id: string; threadId: string; rfcId: string | null };
 export type MailRunReport = { email: string; synced?: Record<string, number>; sent?: string | null; scheduled?: number; error?: string };
 type ScheduledClaim = { id: string; to: string[]; cc: string[]; bcc: string[]; subject: string; body: string; in_reply_to: string | null; references: string | null };
-type Rpc = <T>(fn: string, args: Record<string, unknown>) => Promise<T>;
+export type Rpc = <T>(fn: string, args: Record<string, unknown>) => Promise<T>;
 
-function workerDb(): Rpc {
+export function workerDb(): Rpc {
   const secret = envValue("MAILER_SECRET");
   if (!secret || secret.length < 32) throw new Error("MAILER_SECRET is not set (32+ characters)");
   const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {

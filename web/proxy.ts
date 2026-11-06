@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 // Sign-in, the privacy/terms and unsubscribe pages, the website's contact form, PWA files and /api/mail/tick (which checks its own secret) need no session.
 const PUBLIC = ["/login", "/auth/", "/api/mail/tick", "/privacy", "/terms", "/offline", "/icons/", "/icon", "/apple-icon", "/manifest.webmanifest", "/sw.js", "/robots.txt",
-  "/unsubscribe", "/api/unsubscribe", "/forms/", "/api/forms/"];
+  "/unsubscribe", "/api/unsubscribe", "/forms/", "/api/forms/", "/book/", "/api/book/"];
 
 /** Refresh the Supabase session on every request and send signed-out visitors to /login. */
 export async function proxy(request: NextRequest) {

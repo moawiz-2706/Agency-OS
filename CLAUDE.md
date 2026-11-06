@@ -182,6 +182,17 @@ and excludes `*.test.ts`.
   bulk-set design; `team_update_email`: the author or an owner, and an owner's edit of a teammate's approved email sends it back for their
   approval), **Designs** (both, live preview), **Library**.
 
+### Booking calendar (`0016`, `/calendar`, public `/book/<slug>`, `docs/CALENDAR.md`)
+- `calendars` (one host, weekly `availability` jsonb by weekday "0"-"6", length, interval, buffers, notice, window, daily cap, time zone,
+  Google Meet / phone / custom), `bookings` (manage_token for the client's cancel link), `calendar_accounts` (Google Calendar refresh token,
+  encrypted like Gmail, not readable through the API; `my_calendar_account`, `team_calendar_accounts`).
+- Slots: `lib/booking.ts` (`availableSlots`, `isBookable`; buffers apply on both sides). The public page and its API
+  (`/api/book/[slug]`, `/api/book/manage/[token]`) go through the server with MAILER_SECRET (`lib/calendar/bookings.ts`, `mailer_booking_*`):
+  host's bookings + Google free/busy block slots; `mailer_booking_create` re-checks overlaps under an advisory lock, rate-limits per IP,
+  makes/joins the lead (meeting_booked, express consent), adds a note, a task, an Inbox item. Then a Google event with Meet + invite.
+- Google Calendar OAuth reuses the Gmail redirect URI: `/auth/gcal/connect` sets state `cal.…`, `/auth/gmail/callback` branches on it.
+- `/book/` and `/api/book/` are public (proxy) and always light. `?embed=1` posts `sentinel-booking-height` to the parent.
+
 ### AI email drafts (`/leads/ai-emails`, no migration)
 - Leads page button. Step 1 downloads `researched-leads-<date>.csv` (open leads with a research report and an emailable
   contact, no emails waiting; optionally already-emailed ones) and a prompt (`/api/leads/ai-export?file=prompt`,

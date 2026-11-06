@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { BarChart3, CheckSquare, Inbox, KanbanSquare, LayoutDashboard, ListOrdered, LogOut, Mail, Menu, UserCog, Users, LayoutTemplate } from "lucide-react";
+import { BarChart3, CheckSquare, Inbox, KanbanSquare, LayoutDashboard, ListOrdered, LogOut, Mail, Menu, UserCog, Users, LayoutTemplate, CalendarDays } from "lucide-react";
 import { Brand as BrandLink } from "@/components/brand";
 import { ThemeToggle } from "@/components/theme";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ const NAV = [
   { href: "/sequences", label: "Sequences", icon: ListOrdered },
   { href: "/templates", label: "Templates", icon: LayoutTemplate },
   { href: "/tasks", label: "Tasks", icon: CheckSquare },
+  { href: "/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/inbox", label: "Inbox", icon: Inbox },
   { href: "/mailbox", label: "Mailbox", icon: Mail },
   { href: "/reports", label: "Reports", icon: BarChart3 },

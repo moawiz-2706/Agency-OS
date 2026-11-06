@@ -24,13 +24,13 @@ function client() {
   return { id, secret };
 }
 
-export function authUrl(redirectUri: string, state: string, loginHint?: string | null) {
+export function authUrl(redirectUri: string, state: string, loginHint?: string | null, scopes: string[] = GMAIL_SCOPES) {
   const u = new URL("https://accounts.google.com/o/oauth2/v2/auth");
   u.search = new URLSearchParams({
     client_id: client().id,
     redirect_uri: redirectUri,
     response_type: "code",
-    scope: GMAIL_SCOPES.join(" "),
+    scope: scopes.join(" "),
     access_type: "offline",
     prompt: "consent",            // always return a refresh token
     include_granted_scopes: "false",
@@ -57,11 +57,12 @@ async function tokenRequest(params: Record<string, string>) {
 }
 
 /** Exchange the OAuth code. Returns the refresh token and the verified mailbox address. */
-export async function exchangeCode(code: string, redirectUri: string) {
+export async function exchangeCode(code: string, redirectUri: string, scopes: string[] = GMAIL_SCOPES,
+  missingMessage = "Please allow The Sentinel Systems to both send and read Gmail (tick every box on Google's screen)") {
   const t = await tokenRequest({ code, redirect_uri: redirectUri, grant_type: "authorization_code" });
   const granted = new Set((t.scope ?? "").split(" "));
-  const missing = GMAIL_SCOPES.filter((s) => s.startsWith("https://") && !granted.has(s));
-  if (missing.length) throw new Error("Please allow The Sentinel Systems to both send and read Gmail (tick every box on Google's screen)");
+  const missing = scopes.filter((s) => s.startsWith("https://") && !granted.has(s));
+  if (missing.length) throw new Error(missingMessage);
   if (!t.refresh_token) throw new Error("Google didn't return a refresh token; try connecting again");
   // The ID token comes straight from Google's token endpoint over TLS, so its claims can be read without re-verifying.
   const claims = JSON.parse(Buffer.from((t.id_token ?? "").split(".")[1] ?? "", "base64url").toString("utf8") || "{}");
